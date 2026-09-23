@@ -1,0 +1,13 @@
+# Root-level ignores for this monorepo (docs/ + tewtora-core/ + tewtora-payment/).
+# Each Laravel project has its own .gitignore covering .env, /vendor,
+# /node_modules, etc. within its own tree — this only covers things at the
+# repo root that aren't already handled there.
+
+.DS_Store
+Thumbs.db
+*.log
+
+# Never committed, regardless of which project directory it's in.
+.env
+.env.backup
+.env.production

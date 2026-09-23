@@ -1,0 +1,103 @@
+<?php
+
+namespace Tests\Concerns;
+
+use App\Domains\Auth\Models\Account;
+use App\Domains\Auth\Models\Curriculum;
+use App\Domains\Auth\Models\LearnerProfile;
+use App\Domains\Auth\Models\Subject;
+use App\Domains\Auth\Models\Teacher;
+use App\Domains\Core\Models\LearnerAccountLink;
+use App\Domains\Core\Models\TeacherAccountLink;
+use Illuminate\Support\Str;
+
+/**
+ * Minimal fixture builders for the Auth graph every other domain's tests
+ * hang off (an account owns a learner profile; a teacher belongs to an
+ * account). Plain Model::create() calls rather than factories — these
+ * models don't use HasFactory, and the fixture needs are simple enough
+ * not to justify adding it.
+ */
+trait SeedsAuthGraph
+{
+    protected function makeAccount(array $overrides = []): Account
+    {
+        return Account::create(array_merge([
+            'email' => 'user-'.uniqid().'@example.test',
+            'password_hash' => password_hash('password', PASSWORD_ARGON2ID),
+            'account_type' => 'parent',
+        ], $overrides));
+    }
+
+    protected function makeCurriculum(array $overrides = []): Curriculum
+    {
+        return Curriculum::create(array_merge([
+            'code' => 'curriculum-'.uniqid(),
+            'display_name' => 'Test Curriculum',
+        ], $overrides));
+    }
+
+    protected function makeSubject(array $overrides = []): Subject
+    {
+        return Subject::create(array_merge([
+            'code' => 'subject-'.uniqid(),
+            'display_name' => 'Test Subject',
+        ], $overrides));
+    }
+
+    protected function makeLearnerProfile(array $overrides = []): LearnerProfile
+    {
+        $owner = $overrides['owner_account_id'] ?? $this->makeAccount()->id;
+        $curriculum = $overrides['curriculum_id'] ?? $this->makeCurriculum()->id;
+
+        return LearnerProfile::create(array_merge([
+            'owner_account_id' => $owner,
+            'profile_type' => 'own',
+            'full_name' => 'Test Learner',
+            'grade_level' => 'grade-6',
+            'curriculum_id' => $curriculum,
+        ], $overrides));
+    }
+
+    protected function makeTeacher(array $overrides = []): Teacher
+    {
+        $account = $overrides['account_id'] ?? $this->makeAccount(['account_type' => 'teacher'])->id;
+
+        return Teacher::create(array_merge([
+            'account_id' => $account,
+            'years_experience' => 3,
+            'preferred_format' => 'both',
+            'rate_minor' => 500000,
+        ], $overrides));
+    }
+
+    /**
+     * Keeps core.learner_account_links / core.teacher_account_links in
+     * sync with a fixture — in production these are kept up to date by
+     * event listeners (not built this pass, see CoreServiceProvider's
+     * docblock trail), so tests populate them directly instead.
+     */
+    protected function linkLearnerToCore(LearnerProfile $learner): LearnerAccountLink
+    {
+        return LearnerAccountLink::create([
+            'learner_profile_id' => $learner->id,
+            'public_id' => $learner->public_id,
+            'owner_account_id' => $learner->owner_account_id,
+            'linked_login_account_id' => $learner->linked_login_account_id,
+        ]);
+    }
+
+    protected function linkTeacherToCore(Teacher $teacher): TeacherAccountLink
+    {
+        return TeacherAccountLink::create([
+            'teacher_id' => $teacher->id,
+            'account_id' => $teacher->account_id,
+        ]);
+    }
+
+    /** A Sanctum token for HTTP feature tests — actingAs() alone doesn't populate currentAccessToken(). */
+    protected function tokenFor(Account $account, array $abilities = ['*']): string
+    {
+        return $account->createToken('test-'.Str::random(8), $abilities)->plainTextToken;
+    }
+}

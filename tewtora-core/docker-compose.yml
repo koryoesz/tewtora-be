@@ -1,0 +1,32 @@
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+      MYSQL_DATABASE: auth
+    ports:
+      - "3306:3306"
+    volumes:
+      - tewtora_core_mysqldata:/var/lib/mysql
+
+  # Dedicated instance for `php artisan test` / phpunit.xml — kept separate
+  # from the `mysql` service above so tests never touch dev data. Migrating
+  # against this container creates its own auth/recommendation/core
+  # databases the same way the dev migration does.
+  mysql-test:
+    image: mysql:8.0
+    environment:
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+      MYSQL_DATABASE: auth
+    ports:
+      - "3316:3306"
+    tmpfs:
+      - /var/lib/mysql
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+volumes:
+  tewtora_core_mysqldata:

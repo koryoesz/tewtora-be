@@ -1,0 +1,74 @@
+<?php
+
+namespace App\Domains\Auth\Http\Controllers;
+
+use App\Domains\Auth\Http\Requests\LoginRequest;
+use App\Domains\Auth\Http\Requests\SwitchProfileRequest;
+use App\Domains\Auth\Models\LearnerProfile;
+use App\Domains\Auth\Services\AuthSessionService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cookie;
+
+/**
+ * docs/api-contract.md §0. role is always resolved server-side from the
+ * session/token (CLAUDE.md's enforcement note) — never trusted from a
+ * request body anywhere else in this codebase.
+ */
+class AuthController
+{
+    private const ACTING_AS_COOKIE = 'acting_as_learner_id';
+
+    public function __construct(
+        private readonly AuthSessionService $service,
+    ) {}
+
+    public function login(LoginRequest $request)
+    {
+        $token = $this->service->login($request->validated('email'), $request->validated('password'));
+
+        return response()->json(['token' => $token->plainTextToken]);
+    }
+
+    public function logout(Request $request)
+    {
+        $this->service->logout($request->user());
+
+        return response()->json(status: 204);
+    }
+
+    public function session(Request $request)
+    {
+        $account = $request->user();
+        $actingAsPublicId = $request->cookie(self::ACTING_AS_COOKIE);
+
+        return response()->json([
+            'id' => $account->public_id,
+            'role' => $account->account_type,
+            'name' => $account->email,
+            'acting_as_learner_id' => $actingAsPublicId,
+        ]);
+    }
+
+    /**
+     * docs/api-contract.md §0: "Must be a server-readable session/cookie
+     * value, not client state" — a plain (not encrypted) cookie, since the
+     * value (a public_id) is already safe to expose and the Next.js
+     * frontend's Server Components need to read it directly.
+     */
+    public function switchProfile(SwitchProfileRequest $request)
+    {
+        $learner = LearnerProfile::where('public_id', $request->validated('learner_id'))->firstOrFail();
+
+        $request->user()->can('view', $learner) || abort(403);
+
+        Cookie::queue(Cookie::make(
+            self::ACTING_AS_COOKIE,
+            $learner->public_id,
+            60 * 24,
+            httpOnly: false,
+            raw: true,
+        ));
+
+        return response()->json(['acting_as_learner_id' => $learner->public_id]);
+    }
+}

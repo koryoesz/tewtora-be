@@ -1,0 +1,19 @@
+services:
+  # Shared broker for cross-service outbox events (tewtora-core's
+  # outbox:relay -> tewtora-payment's outbox:consume). Each project's own
+  # docker-compose.yml still runs its own MySQL and Redis — those stay
+  # per-service; only the message broker is genuinely shared infrastructure
+  # between the two apps, since that's the whole point of a broker.
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    environment:
+      RABBITMQ_DEFAULT_USER: tewtora
+      RABBITMQ_DEFAULT_PASS: tewtora
+    ports:
+      - "5672:5672"    # AMQP
+      - "15672:15672"  # management UI — http://localhost:15672
+    volumes:
+      - tewtora_rabbitmq_data:/var/lib/rabbitmq
+
+volumes:
+  tewtora_rabbitmq_data:
