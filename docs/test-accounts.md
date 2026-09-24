@@ -37,9 +37,15 @@ numeric id instead of `public_id` (a known inconsistency —
 
 ## Re-seeding
 
-If the local database ever gets wiped (`php artisan migrate:fresh`,
-switching MySQL instances, etc.), these don't come back automatically —
-there's no seeder class for them yet. Re-run the same `tinker --execute`
-script used to create them, or ask for it again; the `public_id`s above
-will change on a re-seed since they're DB-generated (`DEFAULT (UUID())`),
-not fixed values.
+```bash
+php artisan db:seed
+```
+
+Runs `database/seeders/TestAccountsSeeder.php`, called from
+`DatabaseSeeder` (guarded by `app()->environment('production')`, so it's a
+no-op there). Safe to re-run — every row is `updateOrCreate`d by a stable
+natural key (email, account/teacher id, etc.), not inserted blindly. The
+`public_id`s above are from one seed run and will differ after a
+`migrate:fresh` + reseed, since they're DB-generated (`DEFAULT (UUID())`)
+— look them up again with `php artisan db:seed` (it prints the table) or
+`GET /api/v1/auth/login` with the emails/password above.

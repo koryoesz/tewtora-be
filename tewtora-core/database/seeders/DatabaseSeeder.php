@@ -14,6 +14,9 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        //
+        // Known-password accounts — never seed these in production.
+        if (! app()->environment('production')) {
+            $this->call(TestAccountsSeeder::class);
+        }
     }
 }
