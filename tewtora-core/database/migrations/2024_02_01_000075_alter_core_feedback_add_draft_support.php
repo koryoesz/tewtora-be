@@ -38,8 +38,8 @@ return new class extends Migration
     {
         DB::unprepared(<<<'SQL'
             ALTER TABLE core.feedback
-              DROP CHECK chk_feedback_rating_present_if_submitted,
-              DROP CHECK chk_feedback_notes_present_if_submitted,
+              DROP CONSTRAINT chk_feedback_rating_present_if_submitted,
+              DROP CONSTRAINT chk_feedback_notes_present_if_submitted,
               MODIFY COLUMN session_notes TEXT NOT NULL,
               MODIFY COLUMN progress_rating TINYINT UNSIGNED NOT NULL,
               DROP COLUMN status,

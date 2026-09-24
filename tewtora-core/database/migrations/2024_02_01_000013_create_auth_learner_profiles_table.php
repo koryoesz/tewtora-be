@@ -40,7 +40,7 @@ return new class extends Migration
               KEY ix_learner_profiles_linked_login (linked_login_account_id)
             ) ENGINE=InnoDB;
 
-            CREATE TRIGGER trg_learner_profiles_no_self_login_insert
+            CREATE TRIGGER auth.trg_learner_profiles_no_self_login_insert
               BEFORE INSERT ON auth.learner_profiles
               FOR EACH ROW
               BEGIN
@@ -49,7 +49,7 @@ return new class extends Migration
                 END IF;
               END;
 
-            CREATE TRIGGER trg_learner_profiles_no_self_login_update
+            CREATE TRIGGER auth.trg_learner_profiles_no_self_login_update
               BEFORE UPDATE ON auth.learner_profiles
               FOR EACH ROW
               BEGIN

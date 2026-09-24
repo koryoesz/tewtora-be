@@ -34,7 +34,7 @@ return new class extends Migration
               KEY ix_assessments_learner (learner_profile_id, submitted_at)
             ) ENGINE=InnoDB;
 
-            CREATE TRIGGER trg_assessments_consent_required_if_minor_insert
+            CREATE TRIGGER auth.trg_assessments_consent_required_if_minor_insert
               BEFORE INSERT ON auth.assessments
               FOR EACH ROW
               BEGIN
@@ -46,7 +46,7 @@ return new class extends Migration
                 END IF;
               END;
 
-            CREATE TRIGGER trg_assessments_consent_required_if_minor_update
+            CREATE TRIGGER auth.trg_assessments_consent_required_if_minor_update
               BEFORE UPDATE ON auth.assessments
               FOR EACH ROW
               BEGIN

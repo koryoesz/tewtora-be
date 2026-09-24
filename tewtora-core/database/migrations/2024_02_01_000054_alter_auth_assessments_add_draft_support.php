@@ -41,14 +41,14 @@ return new class extends Migration
               MODIFY COLUMN availability JSON NULL;
 
             ALTER TABLE auth.assessments
-              DROP CHECK chk_learning_goals_present,
+              DROP CONSTRAINT chk_learning_goals_present,
               ADD CONSTRAINT chk_learning_goals_present_if_submitted
                 CHECK (status = 'draft' OR (learning_goals IS NOT NULL AND JSON_LENGTH(learning_goals) > 0));
 
             DROP TRIGGER auth.trg_assessments_consent_required_if_minor_insert;
             DROP TRIGGER auth.trg_assessments_consent_required_if_minor_update;
 
-            CREATE TRIGGER trg_assessments_consent_required_if_minor_insert
+            CREATE TRIGGER auth.trg_assessments_consent_required_if_minor_insert
               BEFORE INSERT ON auth.assessments
               FOR EACH ROW
               BEGIN
@@ -60,7 +60,7 @@ return new class extends Migration
                 END IF;
               END;
 
-            CREATE TRIGGER trg_assessments_consent_required_if_minor_update
+            CREATE TRIGGER auth.trg_assessments_consent_required_if_minor_update
               BEFORE UPDATE ON auth.assessments
               FOR EACH ROW
               BEGIN
@@ -80,7 +80,7 @@ return new class extends Migration
             DROP TRIGGER auth.trg_assessments_consent_required_if_minor_insert;
             DROP TRIGGER auth.trg_assessments_consent_required_if_minor_update;
 
-            CREATE TRIGGER trg_assessments_consent_required_if_minor_insert
+            CREATE TRIGGER auth.trg_assessments_consent_required_if_minor_insert
               BEFORE INSERT ON auth.assessments
               FOR EACH ROW
               BEGIN
@@ -92,7 +92,7 @@ return new class extends Migration
                 END IF;
               END;
 
-            CREATE TRIGGER trg_assessments_consent_required_if_minor_update
+            CREATE TRIGGER auth.trg_assessments_consent_required_if_minor_update
               BEFORE UPDATE ON auth.assessments
               FOR EACH ROW
               BEGIN
@@ -105,7 +105,7 @@ return new class extends Migration
               END;
 
             ALTER TABLE auth.assessments
-              DROP CHECK chk_learning_goals_present_if_submitted,
+              DROP CONSTRAINT chk_learning_goals_present_if_submitted,
               ADD CONSTRAINT chk_learning_goals_present
                 CHECK (JSON_LENGTH(learning_goals) > 0);
 

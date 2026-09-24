@@ -25,21 +25,10 @@ return new class extends Migration
 {
     public function up(): void
     {
-        $statusCheck = DB::selectOne("
-            SELECT cc.CONSTRAINT_NAME AS name
-            FROM information_schema.CHECK_CONSTRAINTS cc
-            JOIN information_schema.TABLE_CONSTRAINTS tc
-              ON tc.CONSTRAINT_SCHEMA = cc.CONSTRAINT_SCHEMA
-             AND tc.CONSTRAINT_NAME = cc.CONSTRAINT_NAME
-            WHERE cc.CONSTRAINT_SCHEMA = 'core'
-              AND tc.TABLE_NAME = 'plans'
-              AND cc.CHECK_CLAUSE LIKE '%active%'
-              AND cc.CHECK_CLAUSE LIKE '%paused%'
-              AND cc.CHECK_CLAUSE NOT LIKE '%renews_at%'
-        ")?->name;
+        $statusCheck = $this->findStatusCheckConstraint();
 
         if ($statusCheck !== null) {
-            DB::statement("ALTER TABLE core.plans DROP CHECK `{$statusCheck}`");
+            DB::statement("ALTER TABLE core.plans DROP CONSTRAINT `{$statusCheck}`");
         }
 
         DB::statement(<<<'SQL'
@@ -48,7 +37,7 @@ return new class extends Migration
               CHECK (status IN ('active','paused','ended'))
         SQL);
 
-        DB::statement('ALTER TABLE core.plans DROP CHECK chk_plans_renews_at_if_active');
+        DB::statement('ALTER TABLE core.plans DROP CONSTRAINT chk_plans_renews_at_if_active');
         DB::statement(<<<'SQL'
             ALTER TABLE core.plans
               ADD CONSTRAINT chk_plans_renews_at_if_active
@@ -58,18 +47,81 @@ return new class extends Migration
 
     public function down(): void
     {
-        DB::statement('ALTER TABLE core.plans DROP CHECK chk_plans_renews_at_if_active');
+        DB::statement('ALTER TABLE core.plans DROP CONSTRAINT chk_plans_renews_at_if_active');
         DB::statement(<<<'SQL'
             ALTER TABLE core.plans
               ADD CONSTRAINT chk_plans_renews_at_if_active
               CHECK (status = 'paused' OR renews_at IS NOT NULL)
         SQL);
 
-        DB::statement('ALTER TABLE core.plans DROP CHECK chk_plans_status');
+        DB::statement('ALTER TABLE core.plans DROP CONSTRAINT chk_plans_status');
         DB::statement(<<<'SQL'
             ALTER TABLE core.plans
               ADD CONSTRAINT chk_plans_status_restored
               CHECK (status IN ('active','paused'))
         SQL);
+    }
+
+    /**
+     * Same MariaDB quirk as 2024_02_01_000050_alter_auth_accounts_add_roles:
+     * information_schema.CHECK_CONSTRAINTS reports a name for this inline
+     * column-level CHECK that MariaDB's own ALTER TABLE ... DROP CONSTRAINT
+     * then refuses (error 1091), while MySQL 8 accepts it. Read the name
+     * straight out of SHOW CREATE TABLE instead — matched by which column
+     * the CHECK references (status, but not renews_at) rather than by the
+     * value list's literal text, since MySQL normalizes CHECK_CLAUSE with
+     * charset prefixes (_utf8mb4'active') that wouldn't reliably match.
+     *
+     * SHOW CREATE TABLE wraps CHECK clauses in a doubled paren
+     * (`CHECK ((\`status\` in (...)))`), so clauses are extracted with a
+     * paren-balancing scan rather than a fixed-depth regex. Excludes
+     * chk_plans_status by name so a retry after this migration partially
+     * ran still finds the original rather than re-matching its successor.
+     */
+    private function findStatusCheckConstraint(): ?string
+    {
+        $row = DB::selectOne('SHOW CREATE TABLE core.plans');
+        $ddl = $row?->{'Create Table'};
+
+        if ($ddl === null) {
+            return null;
+        }
+
+        foreach ($this->extractCheckConstraints($ddl) as $name => $clause) {
+            if ($name !== 'chk_plans_status' && str_contains($clause, 'status') && ! str_contains($clause, 'renews_at')) {
+                return $name;
+            }
+        }
+
+        return null;
+    }
+
+    /** @return array<string, string> constraint name => CHECK clause body */
+    private function extractCheckConstraints(string $ddl): array
+    {
+        $constraints = [];
+
+        if (! preg_match_all('/CONSTRAINT `([^`]+)` CHECK \(/', $ddl, $matches, PREG_OFFSET_CAPTURE)) {
+            return $constraints;
+        }
+
+        foreach ($matches[1] as [$name, $nameOffset]) {
+            $start = $nameOffset + strlen($name) + strlen('` CHECK (');
+            $depth = 1;
+            $pos = $start;
+
+            while ($depth > 0 && $pos < strlen($ddl)) {
+                if ($ddl[$pos] === '(') {
+                    $depth++;
+                } elseif ($ddl[$pos] === ')') {
+                    $depth--;
+                }
+                $pos++;
+            }
+
+            $constraints[$name] = substr($ddl, $start, $pos - $start - 1);
+        }
+
+        return $constraints;
     }
 };

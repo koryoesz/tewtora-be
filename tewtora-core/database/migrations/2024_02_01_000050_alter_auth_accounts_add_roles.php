@@ -23,7 +23,7 @@ return new class extends Migration
         $constraint = $this->findAccountTypeCheckConstraint();
 
         if ($constraint !== null) {
-            DB::statement("ALTER TABLE auth.accounts DROP CHECK `{$constraint}`");
+            DB::statement("ALTER TABLE auth.accounts DROP CONSTRAINT `{$constraint}`");
         }
 
         DB::statement(<<<'SQL'
@@ -35,7 +35,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        DB::statement('ALTER TABLE auth.accounts DROP CHECK chk_accounts_account_type');
+        DB::statement('ALTER TABLE auth.accounts DROP CONSTRAINT chk_accounts_account_type');
 
         DB::statement(<<<'SQL'
             ALTER TABLE auth.accounts
@@ -44,19 +44,66 @@ return new class extends Migration
         SQL);
     }
 
+    /**
+     * information_schema.CHECK_CONSTRAINTS reports a synthetic name for
+     * this inline column-level CHECK (the column's own name, here
+     * "account_type") on both engines — but MariaDB's ALTER TABLE ...
+     * DROP CONSTRAINT rejects that synthetic name with error 1091 even
+     * though information_schema lists it, while MySQL 8 accepts it. Read
+     * the name straight out of SHOW CREATE TABLE instead: that's the exact
+     * identifier either engine will actually let you drop by.
+     *
+     * SHOW CREATE TABLE wraps CHECK clauses in a doubled paren
+     * (`CHECK ((\`account_type\` in (...)))`), so a fixed-depth regex isn't
+     * enough — clauses are extracted with a paren-balancing scan instead.
+     * Excludes chk_accounts_account_type by name so a retry after this
+     * migration partially ran (constraint added, old one not yet dropped)
+     * still finds the original rather than re-matching its own successor.
+     */
     private function findAccountTypeCheckConstraint(): ?string
     {
-        $row = DB::selectOne(<<<'SQL'
-            SELECT cc.CONSTRAINT_NAME AS name
-            FROM information_schema.CHECK_CONSTRAINTS cc
-            JOIN information_schema.TABLE_CONSTRAINTS tc
-              ON tc.CONSTRAINT_SCHEMA = cc.CONSTRAINT_SCHEMA
-             AND tc.CONSTRAINT_NAME = cc.CONSTRAINT_NAME
-            WHERE cc.CONSTRAINT_SCHEMA = 'auth'
-              AND tc.TABLE_NAME = 'accounts'
-              AND cc.CHECK_CLAUSE LIKE '%account_type%'
-        SQL);
+        $row = DB::selectOne('SHOW CREATE TABLE auth.accounts');
+        $ddl = $row?->{'Create Table'};
 
-        return $row?->name;
+        if ($ddl === null) {
+            return null;
+        }
+
+        foreach ($this->extractCheckConstraints($ddl) as $name => $clause) {
+            if ($name !== 'chk_accounts_account_type' && str_contains($clause, 'account_type')) {
+                return $name;
+            }
+        }
+
+        return null;
+    }
+
+    /** @return array<string, string> constraint name => CHECK clause body */
+    private function extractCheckConstraints(string $ddl): array
+    {
+        $constraints = [];
+
+        if (! preg_match_all('/CONSTRAINT `([^`]+)` CHECK \(/', $ddl, $matches, PREG_OFFSET_CAPTURE)) {
+            return $constraints;
+        }
+
+        foreach ($matches[1] as [$name, $nameOffset]) {
+            $start = $nameOffset + strlen($name) + strlen('` CHECK (');
+            $depth = 1;
+            $pos = $start;
+
+            while ($depth > 0 && $pos < strlen($ddl)) {
+                if ($ddl[$pos] === '(') {
+                    $depth++;
+                } elseif ($ddl[$pos] === ')') {
+                    $depth--;
+                }
+                $pos++;
+            }
+
+            $constraints[$name] = substr($ddl, $start, $pos - $start - 1);
+        }
+
+        return $constraints;
     }
 };
