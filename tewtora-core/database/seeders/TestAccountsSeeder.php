@@ -28,6 +28,14 @@ use Illuminate\Support\Facades\Hash;
  * in sync has been built yet (CLAUDE.md's cross-domain hard rule still
  * applies going forward — this is a seeding-time stand-in for that, not a
  * substitute for it).
+ *
+ * grade_level is free text (Form Requests only enforce string|max:60 — no
+ * fixed vocabulary exists anywhere in docs/api-contract.md), so
+ * LearnerProfileResource's grade_label is whatever was typed in verbatim.
+ * Kept here as the slug style ("grade-8") to match the one example in
+ * docs/frontend-integration-guide.md, so re-seeding any environment from
+ * this file gives a consistent format rather than whatever an earlier
+ * ad-hoc script happened to use.
  */
 class TestAccountsSeeder extends Seeder
 {
@@ -77,7 +85,7 @@ class TestAccountsSeeder extends Seeder
             [
                 'linked_login_account_id' => $child->id,
                 'profile_type' => 'child',
-                'grade_level' => 'Grade 8',
+                'grade_level' => 'grade-8',
                 'date_of_birth' => now()->subYears(13)->toDateString(),
                 'curriculum_id' => $curriculum->id,
             ],
@@ -88,7 +96,7 @@ class TestAccountsSeeder extends Seeder
             [
                 'linked_login_account_id' => null,
                 'profile_type' => 'own',
-                'grade_level' => 'Grade 11',
+                'grade_level' => 'grade-11',
                 'date_of_birth' => now()->subYears(16)->toDateString(),
                 'curriculum_id' => $curriculum->id,
             ],
