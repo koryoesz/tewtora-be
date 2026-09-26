@@ -1,6 +1,7 @@
 <?php
 
 use App\Domains\Core\Http\Controllers\FeedbackController;
+use App\Domains\Core\Http\Controllers\MessageThreadController;
 use App\Domains\Core\Http\Controllers\MoveRequestController;
 use App\Domains\Core\Http\Controllers\PlanController;
 use App\Domains\Core\Http\Controllers\TrialRequestController;
@@ -38,4 +39,10 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/sessions/{session:public_id}/feedback', [FeedbackController::class, 'show']);
     Route::put('/sessions/{session:public_id}/feedback/draft', [FeedbackController::class, 'saveDraft']);
     Route::post('/sessions/{session:public_id}/feedback', [FeedbackController::class, 'submit']);
+
+    Route::get('/messages/threads', [MessageThreadController::class, 'index']);
+    Route::get('/messages/threads/{thread:public_id}', [MessageThreadController::class, 'show']);
+    Route::post('/messages/threads/{thread:public_id}/messages', [MessageThreadController::class, 'store']);
+    Route::post('/messages/threads/{thread:public_id}/read', [MessageThreadController::class, 'markRead']);
+    Route::post('/messages/threads/{thread:public_id}/report', [MessageThreadController::class, 'report']);
 });

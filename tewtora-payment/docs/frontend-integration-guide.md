@@ -1,10 +1,10 @@
 # Tewtora Backend — Frontend Integration Guide
 
-**Status as of 2026-09-22.** This describes what's actually implemented and
+**Status as of 2026-09-27.** This describes what's actually implemented and
 callable right now — not the full product vision. It's derived from
 `docs/api-contract.md` (the original FE→BE contract) and
 `docs/api-gap-analysis.md`, but where those describe the target, this
-describes reality: 49 working endpoints across two services, and an
+describes reality: 57 working endpoints across two services, and an
 explicit list of what isn't built yet so you don't integrate against
 something that doesn't exist.
 
@@ -394,13 +394,76 @@ All fields optional: `attendance` (`present|absent|late`), `session_notes`,
 ### `POST /sessions/{id}/feedback` 🔒 — submits, triggers payment release
 `session_notes` and `progress_rating` are **required** here (empty note is
 rejected with `422`). This writes an internal event that (once the two
-services share a real message broker — see §13) releases that session's
+services share a real message broker — see §14) releases that session's
 held payment on the Payment side. No `amount_released` field comes back in
 this response; don't build a toast that states an amount from this call.
 
 ---
 
-## 12. Admin (`/internal/*`, all require `role: admin`)
+## 12. Messaging
+
+One thread per plan (a paused/ended plan keeps its own history, never
+merges into an undifferentiated stream), plus one "Tewtora support" thread
+per family (parent/independent-student ↔ any staff member, no teacher, no
+plan). **Group-plan threads (more than one family) are not built** — only
+1:1 plans get a thread today.
+
+A thread's messages are visible to: the owning parent/independent-student,
+the linked child login (full participant — can read, send, and report;
+just can't touch anything booking/payment-shaped, and nothing here does),
+the plan's teacher, and (support threads only) any admin.
+
+### `GET /messages/threads` 🔒
+All threads the caller is a party to (an admin instead gets every support
+thread — there's no per-incident staff assignment). `MessageThreadResource[]`:
+```json
+{ "id": "uuid", "plan_id": "uuid-or-null", "learner_id": "uuid", "teacher_id": "uuid-or-null", "is_support": false, "unread_count": 2, "last_message_at": "..." }
+```
+No teacher/learner display name — same as `PlanResource`, correlate against
+`GET /teachers/{id}` / `GET /learners` yourself.
+
+### `GET /messages/threads/{id}` 🔒
+`403` if you're not a party. Returns the thread plus every message, oldest first:
+```json
+{
+  "thread": { "id": "uuid", ... },
+  "messages": [
+    { "id": "uuid", "sender_role": "teacher", "is_own": false, "body": "...", "redacted": false, "created_at": "..." }
+  ]
+}
+```
+`sender_role` is `parent|independent_student|child|teacher|admin`. No
+sender account id — only role + `is_own` (whether it's the caller's own
+message). **Never calls mark-read as a side effect** — call `/read`
+explicitly once the user has actually opened the thread.
+
+### `POST /messages/threads/{id}/messages` 🔒
+```json
+{ "text": "See you Tuesday!" }
+```
+Returns the created `MessageResource`. **Contact-info redaction happens
+server-side, unconditionally** — phone-number-like digit runs, emails,
+URLs, and `wa.me` links are replaced with `[redacted]` before the message
+is ever persisted, regardless of anything the client already stripped.
+`redacted: true` on the response means something was caught; the original
+un-redacted text is never stored anywhere, not even for safeguarding
+review.
+
+### `POST /messages/threads/{id}/read` 🔒
+No body. Returns `204`. Resets the caller's unread count for this thread to 0.
+
+### `POST /messages/threads/{id}/report` 🔒
+No body. Returns `204`. Creates a real `SafeguardingIncident` (visible
+immediately in `/internal/safeguarding-incidents` — same queue, not a
+separate concept), `severity: medium` by default, with an auto-composed
+summary — the caller never writes free text for this. **`422`
+(`support_thread_cannot_be_reported`) on a support thread** — a
+parent-with-staff conversation has no teacher to attach an incident to,
+and staff is already directly in that thread.
+
+---
+
+## 13. Admin (`/internal/*`, all require `role: admin`)
 
 Non-admin callers get a `403` from all of these.
 
@@ -446,7 +509,7 @@ supply gaps) and the stuck-money screen — no endpoints exist for either.
 
 ---
 
-## 13. Payment service (separate base URL — see the table at the top)
+## 14. Payment service (separate base URL — see the table at the top)
 
 Only the teacher earnings ledger exists:
 
@@ -485,19 +548,25 @@ just unwritten code — don't estimate it as "almost done."
 
 ---
 
-## 14. Not implemented anywhere (don't build UI expecting these yet)
+## 15. Not implemented anywhere (don't build UI expecting these yet)
 
 - Account registration
 - `/matches` (ranked teacher results from an assessment)
 - Live session (join/leave/chat/whiteboard)
 - Teacher roster, teacher stats, teacher schedule diary, teacher
   availability CRUD, block-time-off
-- Checkout/payment (see §13)
+- Checkout/payment (see §14)
 - Admin matching-ops and stuck-money screens
+- Child sign-in via PIN (the PIN itself can be set — see §4 — but nothing
+  accepts one at login yet)
+- Message attachments ("Attach work"), group-plan threads (more than one
+  family), typing indicators, real-time delivery, and any admin-side view
+  of reported-but-not-yet-a-formal-incident messages (a report always
+  becomes a real `SafeguardingIncident` immediately — see §12)
 
 ---
 
 **Questions or a mismatch between this doc and what you actually get back?**
 Treat the running code as ground truth over this file, and flag it —
-this was hand-written from the route list and resource classes on
-2026-09-22 and will drift the moment either side changes.
+this was hand-written from the route list and resource classes, last
+updated 2026-09-27, and will drift the moment either side changes.

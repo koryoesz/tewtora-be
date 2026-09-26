@@ -67,6 +67,18 @@ return [
             // themselves. Forcing InnoDB here is scoped to this app's own
             // Schema Blueprint-generated tables only.
             'engine' => 'InnoDB',
+            // This MySQL server's SYSTEM timezone is the host machine's
+            // local time, not UTC — every migration's `created_at`/
+            // `updated_at` DEFAULT CURRENT_TIMESTAMP(6) is therefore in
+            // local time, while Laravel's own now() (app.timezone=UTC)
+            // isn't. That skew was latent until messaging's unread-count
+            // logic needed to compare a PHP-set timestamp
+            // (message_reads.last_read_at) against a DB-set one
+            // (messages.created_at) — see MessagingService. Forcing this
+            // connection's session to UTC (scoped here, not the shared
+            // server's global setting) makes every such comparison correct
+            // everywhere, not just for that one column.
+            'timezone' => '+00:00',
             'options' => extension_loaded('pdo_mysql') ? array_filter([
                 Mysql::ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
             ]) : [],

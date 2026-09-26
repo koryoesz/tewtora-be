@@ -22,6 +22,7 @@ class TeacherAccountLink extends Model
 
     protected $fillable = [
         'teacher_id',
+        'public_id',
         'account_id',
     ];
 

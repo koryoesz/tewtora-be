@@ -9,6 +9,9 @@ use App\Domains\Auth\Models\Subject;
 use App\Domains\Auth\Models\Teacher;
 use App\Domains\Auth\Models\TeacherVerificationCheck;
 use App\Domains\Core\Models\LearnerAccountLink;
+use App\Domains\Core\Models\Message;
+use App\Domains\Core\Models\MessageThread;
+use App\Domains\Core\Models\Plan;
 use App\Domains\Core\Models\TeacherAccountLink;
 use App\Domains\Recommendation\Models\LearnerProfileView;
 use App\Domains\Recommendation\Models\TeacherProfileView;
@@ -152,7 +155,48 @@ class TestAccountsSeeder extends Seeder
 
         TeacherAccountLink::query()->updateOrCreate(
             ['teacher_id' => $teacher->id],
-            ['account_id' => $teacher->account_id],
+            ['public_id' => $teacher->public_id, 'account_id' => $teacher->account_id],
+        );
+
+        $plan = Plan::query()->updateOrCreate(
+            ['learner_profile_id' => $ada->id, 'teacher_id' => $teacher->id],
+            [
+                'subject_id' => $subject->id,
+                'format' => 'one_on_one',
+                'days' => ['tue', 'thu'],
+                'time_of_day' => '16:00:00',
+                'status' => 'active',
+                'rate_minor' => $teacher->rate_minor,
+                'currency_code' => $teacher->currency_code,
+                'sessions_per_month' => 8,
+                'sessions_remaining' => 8,
+                'renews_at' => now()->addMonth(),
+                'reference' => 'TWT-SEED-0001',
+            ],
+        )->refresh();
+
+        // Messaging: one thread for the seeded plan, one support thread for
+        // the parent — matches the two thread "shapes" the frontend built
+        // against (plan-backed and is_support), each with a starter message
+        // so a fresh seed has something to view immediately.
+        $planThread = MessageThread::query()->updateOrCreate(
+            ['plan_id' => $plan->id],
+            ['learner_profile_id' => $ada->id, 'teacher_id' => $teacher->id, 'is_support' => false],
+        );
+
+        Message::query()->firstOrCreate(
+            ['thread_id' => $planThread->id, 'sender_account_id' => $teacherAccount->id],
+            ['sender_role' => 'teacher', 'body' => "Hi! Looking forward to Ada's Tuesday session.", 'redacted' => false],
+        );
+
+        $supportThread = MessageThread::query()->updateOrCreate(
+            ['learner_profile_id' => $ada->id, 'is_support' => true],
+            ['plan_id' => null, 'teacher_id' => null],
+        );
+
+        Message::query()->firstOrCreate(
+            ['thread_id' => $supportThread->id, 'sender_account_id' => $admin->id],
+            ['sender_role' => 'admin', 'body' => 'Hi, this is the Tewtora support thread — let us know if you need anything.', 'redacted' => false],
         );
 
         LearnerProfileView::query()->updateOrCreate(
