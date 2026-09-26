@@ -20,4 +20,6 @@ interface LearnerProfileRepositoryInterface
     public function update(LearnerProfile $profile, array $data): LearnerProfile;
 
     public function archive(LearnerProfile $profile): void;
+
+    public function restore(LearnerProfile $profile): void;
 }

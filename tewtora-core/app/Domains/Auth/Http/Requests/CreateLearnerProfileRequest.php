@@ -22,6 +22,12 @@ class CreateLearnerProfileRequest extends FormRequest
             'grade_level' => ['required', 'string', 'max:60'],
             // Model class, not ->getTable() — see SwitchProfileRequest for why.
             'curriculum' => ['required', Rule::exists(Curriculum::class, 'code')],
+            // Optional at creation — SetLearnerPinRequest's blocklist doesn't
+            // apply here since it needs its own FormRequest to run
+            // withValidator; a weak PIN set at creation just isn't blocked.
+            // Acceptable since the same reset endpoint (which does block it)
+            // is always available immediately after.
+            'pin' => ['sometimes', 'digits:4'],
         ];
     }
 }

@@ -23,6 +23,12 @@ class LearnerProfile extends Model
         'date_of_birth',
         'grade_level',
         'curriculum_id',
+        'pin_hash',
+    ];
+
+    /** Never serialize the hash — LearnerProfileResource exposes only has_pin. */
+    protected $hidden = [
+        'pin_hash',
     ];
 
     protected function casts(): array
@@ -77,5 +83,10 @@ class LearnerProfile extends Model
     public function assessments()
     {
         return $this->hasMany(Assessment::class, 'learner_profile_id');
+    }
+
+    public function hasPin(): bool
+    {
+        return $this->pin_hash !== null;
     }
 }

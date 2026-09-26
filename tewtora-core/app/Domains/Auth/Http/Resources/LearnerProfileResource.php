@@ -15,6 +15,8 @@ class LearnerProfileResource extends JsonResource
             'name' => $this->full_name,
             'initials' => collect(explode(' ', $this->full_name))->map(fn ($p) => strtoupper($p[0] ?? ''))->implode(''),
             'grade_label' => $this->grade_level,
+            'has_pin' => $this->hasPin(),
+            'archived' => $this->trashed(),
             'curriculum' => $this->whenLoaded('curriculum', fn () => $this->curriculum->code),
             'assessment_complete' => Assessment::where('learner_profile_id', $this->id)
                 ->where('status', 'submitted')

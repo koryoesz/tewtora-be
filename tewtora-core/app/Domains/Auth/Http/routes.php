@@ -27,6 +27,11 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/learners/{learner:public_id}', [LearnerProfileController::class, 'show']);
     Route::post('/learners', [LearnerProfileController::class, 'store']);
     Route::patch('/learners/{learner:public_id}', [LearnerProfileController::class, 'update']);
+    Route::post('/learners/{learner:public_id}/pin', [LearnerProfileController::class, 'setPin']);
+    Route::post('/learners/{learner:public_id}/archive', [LearnerProfileController::class, 'archive']);
+    // Raw string, not {learner:public_id} binding — that binding excludes
+    // soft-deleted rows, which is exactly the one this restores.
+    Route::post('/learners/{learnerPublicId}/restore', [LearnerProfileController::class, 'restore']);
 
     Route::get('/learners/{learner:public_id}/assessment', [AssessmentController::class, 'show']);
     Route::put('/learners/{learner:public_id}/assessment', [AssessmentController::class, 'saveDraft']);

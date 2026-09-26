@@ -96,9 +96,10 @@ Everywhere else, `{id}` in the paths below is the UUID.
 ## 4. Learners
 
 ### `GET /learners` 🔒
-All learners under the caller's account. `LearnerProfileResource[]`:
+All learners under the caller's account, **excluding archived ones** (see
+below). `LearnerProfileResource[]`:
 ```json
-{ "id": "uuid", "name": "Ada", "initials": "A", "grade_label": "grade-7", "curriculum": "ib", "assessment_complete": false }
+{ "id": "uuid", "name": "Ada", "initials": "A", "grade_label": "grade-7", "curriculum": "ib", "has_pin": false, "archived": false, "assessment_complete": false }
 ```
 
 ### `GET /learners/{id}` 🔒
@@ -122,8 +123,36 @@ gets a 404, not a 403).
 All fields optional (`sometimes`). The linked-login child can `view` but
 gets `403` here.
 
-**Not implemented:** archiving a learner (contract mentions it, no
-endpoint built).
+### `POST /learners/{id}/pin` 🔒 — owner only
+```json
+{ "pin": "7391" }
+```
+Sets or resets the child's sign-in PIN. Exactly 4 digits; a short blocklist
+of trivially weak PINs (`0000`, `1234`, `4321`, etc. — every repeated digit
+and simple run) is rejected with `422`. Stored hashed, **never returned in
+any response** — `LearnerProfileResource.has_pin` (boolean) is the only
+signal. Resetting immediately revokes the linked child login's existing
+Sanctum tokens, matching "they're signed out everywhere" — the child has to
+sign in again with the new PIN. The linked-login child itself gets `403`
+here; only the owning parent can call this.
+
+**Not implemented:** the actual child-sign-in-via-PIN endpoint. This only
+covers the parent-side management half — there's no `POST /auth/child-login`
+(or similar) yet that accepts a sign-in name + PIN and issues a token.
+Setting a PIN here doesn't yet let anyone use it to log in. Ask backend
+before building the sign-in screen against this.
+
+### `POST /learners/{id}/archive` 🔒 — owner only
+Soft-deletes the learner (existing `deleted_at`/`SoftDeletes` mechanism, not
+a separate flag). Returns the updated `LearnerProfileResource`
+(`archived: true`). Archived learners drop out of `GET /learners` and
+`GET /learners/{id}` automatically (`404` on the latter). Plans, sessions,
+feedback, and payment history are untouched — this only hides the profile
+itself.
+
+### `POST /learners/{id}/restore` 🔒 — owner only
+Reverses an archive. Returns the updated `LearnerProfileResource`
+(`archived: false`).
 
 ---
 
@@ -152,6 +181,20 @@ Any subset of: `grade_level`, `curriculum`, `subject_ids`,
 (`one_on_one|group|no_preference`), `session_frequency`
 (`weekly|twice_weekly|custom`), `availability`. Nothing is required —
 save whatever the current wizard step has.
+
+`availability` is now validated (previously accepted as opaque
+`unknown[]`), one entry per selected weekday:
+```json
+{ "availability": [
+  { "day": "tue", "starts_at": "16:00", "ends_at": "18:00" },
+  { "day": "thu", "starts_at": "16:00", "ends_at": "18:00" }
+] }
+```
+`day`: `mon|tue|wed|thu|fri|sat|sun`. `starts_at`/`ends_at`: 24h `HH:mm`,
+`ends_at` must be after `starts_at`. This is the *offered* window — the
+matched teacher picks the actual class time within it, same as before.
+**The old `{day, band, state}` shape is no longer accepted** — nothing
+server-side depended on it, since the column was unvalidated until now.
 
 ### `POST /learners/{id}/assessment/submit` 🔒
 Same fields as above, all now conceptually "final," plus:

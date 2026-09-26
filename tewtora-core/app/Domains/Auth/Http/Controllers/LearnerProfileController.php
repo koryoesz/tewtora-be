@@ -3,6 +3,7 @@
 namespace App\Domains\Auth\Http\Controllers;
 
 use App\Domains\Auth\Http\Requests\CreateLearnerProfileRequest;
+use App\Domains\Auth\Http\Requests\SetLearnerPinRequest;
 use App\Domains\Auth\Http\Requests\UpdateLearnerProfileRequest;
 use App\Domains\Auth\Http\Resources\LearnerProfileResource;
 use App\Domains\Auth\Models\Curriculum;
@@ -11,6 +12,7 @@ use App\Domains\Auth\Repositories\LearnerProfileRepositoryInterface;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\Hash;
 
 class LearnerProfileController
 {
@@ -42,6 +44,7 @@ class LearnerProfileController
             'full_name' => $request->validated('name'),
             'grade_level' => $request->validated('grade_level'),
             'curriculum_id' => $curriculum->id,
+            'pin_hash' => $request->has('pin') ? Hash::make($request->validated('pin')) : null,
         ]);
 
         return (new LearnerProfileResource($profile->load('curriculum')))
@@ -66,5 +69,48 @@ class LearnerProfileController
         $profile = $this->learnerProfiles->update($learner, $data);
 
         return new LearnerProfileResource($profile->load('curriculum'));
+    }
+
+    /**
+     * A dedicated action rather than folding into update() — its own auth
+     * check, and it can't be silently skipped by PATCH's `sometimes` rules.
+     * Setting/changing a PIN revokes the child's existing sessions: the
+     * frontend's own copy already promises "they're signed out everywhere
+     * and use the new PIN next time."
+     */
+    public function setPin(SetLearnerPinRequest $request, LearnerProfile $learner): LearnerProfileResource
+    {
+        $learner = $this->learnerProfiles->update($learner, [
+            'pin_hash' => Hash::make($request->validated('pin')),
+        ]);
+
+        $learner->linkedLoginAccount?->tokens()->delete();
+
+        return new LearnerProfileResource($learner->load('curriculum'));
+    }
+
+    public function archive(Request $request, LearnerProfile $learner): LearnerProfileResource
+    {
+        $request->user()->can('manage', $learner) || abort(403);
+
+        $this->learnerProfiles->archive($learner);
+
+        return new LearnerProfileResource($learner->fresh()->load('curriculum'));
+    }
+
+    /**
+     * Route model binding excludes soft-deleted rows, so this takes the raw
+     * public_id and resolves through the repository (which drops all
+     * scopes, trashed included) instead of {learner:public_id} binding.
+     */
+    public function restore(Request $request, string $learnerPublicId): LearnerProfileResource
+    {
+        $learner = $this->learnerProfiles->findByPublicId($learnerPublicId) ?? abort(404);
+
+        $request->user()->can('manage', $learner) || abort(403);
+
+        $this->learnerProfiles->restore($learner);
+
+        return new LearnerProfileResource($learner->fresh()->load('curriculum'));
     }
 }

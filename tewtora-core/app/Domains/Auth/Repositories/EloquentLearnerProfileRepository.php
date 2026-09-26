@@ -41,4 +41,9 @@ class EloquentLearnerProfileRepository implements LearnerProfileRepositoryInterf
     {
         $profile->delete();
     }
+
+    public function restore(LearnerProfile $profile): void
+    {
+        $profile->restore();
+    }
 }

@@ -24,7 +24,17 @@ class SaveAssessmentDraftRequest extends FormRequest
             'budget_tier' => ['nullable', 'in:basic,standard,premium'],
             'preferred_format' => ['nullable', 'in:one_on_one,group,no_preference'],
             'session_frequency' => ['nullable', 'in:weekly,twice_weekly,custom'],
+            // Formalized per the frontend's redesigned budget/schedule step:
+            // one entry per selected weekday, a real HH:mm free-time window
+            // (the matched teacher picks the actual class time within it) —
+            // replaces the old {day,band,state} shape, which is why this
+            // wasn't validated at all before now (AssessmentResource still
+            // types the column as unknown[] at rest; this only constrains
+            // what's accepted on write).
             'availability' => ['nullable', 'array'],
+            'availability.*.day' => ['required_with:availability', 'in:mon,tue,wed,thu,fri,sat,sun'],
+            'availability.*.starts_at' => ['required_with:availability', 'date_format:H:i'],
+            'availability.*.ends_at' => ['required_with:availability', 'date_format:H:i', 'after:availability.*.starts_at'],
         ];
     }
 }
