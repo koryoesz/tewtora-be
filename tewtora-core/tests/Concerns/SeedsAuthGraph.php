@@ -95,8 +95,19 @@ trait SeedsAuthGraph
         ]);
     }
 
-    /** A Sanctum token for HTTP feature tests — actingAs() alone doesn't populate currentAccessToken(). */
-    protected function tokenFor(Account $account, array $abilities = ['*']): string
+    /**
+     * A Sanctum token for HTTP feature tests — actingAs() alone doesn't
+     * populate currentAccessToken(). Default is NOT Sanctum's bare '*'
+     * wildcard: PersonalAccessToken::can() treats '*' as satisfying every
+     * ability check, including the literal 'act-as-readonly' string
+     * BlockActAsMutations looks for — so a '*' token gets treated as a
+     * read-only act-as session and 403s on every mutation. Production
+     * never issues a bare '*' token (AuthSessionService grants named
+     * per-role abilities; only AccountSearchService's real act-as flow
+     * grants 'act-as-readonly' specifically), so this is a test-fixture
+     * bug, not something the middleware needs to account for.
+     */
+    protected function tokenFor(Account $account, array $abilities = ['test:full-access']): string
     {
         return $account->createToken('test-'.Str::random(8), $abilities)->plainTextToken;
     }

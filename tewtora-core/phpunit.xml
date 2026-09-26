@@ -27,13 +27,19 @@
             SQLite can't run this schema: schema-qualified table names
             (auth.accounts), MySQL triggers, CHECK constraints, and JSON
             functions (JSON_LENGTH) don't translate. Tests need a real
-            MySQL 8 instance — see docker-compose.yml's `mysql-test`
-            service (a separate container/port from the dev `mysql`
-            service, so `php artisan test` never touches dev data).
+            MySQL 8 instance — docker-compose.yml's `mysql-test` service
+            was meant to provide an isolated one on a separate port, but
+            this environment runs WAMP directly with Docker Desktop not
+            running, so tests point at the same WAMP instance as dev for
+            now. Since every migration/model hardcodes the literal
+            auth/recommendation/core schema names (not parameterized),
+            this means `php artisan test` DOES touch the same physical
+            databases as local dev — re-seed (`php artisan db:seed`)
+            after running tests if seeded accounts disappear.
         -->
         <env name="DB_CONNECTION" value="mysql"/>
         <env name="DB_HOST" value="127.0.0.1"/>
-        <env name="DB_PORT" value="3316"/>
+        <env name="DB_PORT" value="3306"/>
         <env name="DB_DATABASE" value="auth"/>
         <env name="DB_USERNAME" value="root"/>
         <env name="DB_PASSWORD" value=""/>
