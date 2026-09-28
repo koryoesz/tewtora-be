@@ -11,6 +11,12 @@ return new class extends Migration
      */
     public function up(): void
     {
+        // Same guard as 2026_09_24_231353_create_sessions_table — protects
+        // against the table existing without this migration being recorded.
+        if (Schema::hasTable('personal_access_tokens')) {
+            return;
+        }
+
         Schema::create('personal_access_tokens', function (Blueprint $table) {
             $table->id();
             $table->morphs('tokenable');

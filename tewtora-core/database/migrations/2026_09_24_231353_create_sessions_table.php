@@ -11,6 +11,15 @@ return new class extends Migration
      */
     public function up(): void
     {
+        // Guards against the table already existing but this migration not
+        // being recorded in the migrations table (e.g. an earlier manual
+        // migrate that got interrupted after CREATE TABLE but before the
+        // record was written) — without this, migrate:fresh/migrate both
+        // fail with "table already exists" instead of just moving on.
+        if (Schema::hasTable('sessions')) {
+            return;
+        }
+
         Schema::create('sessions', function (Blueprint $table) {
             $table->string('id')->primary();
             $table->foreignId('user_id')->nullable()->index();
