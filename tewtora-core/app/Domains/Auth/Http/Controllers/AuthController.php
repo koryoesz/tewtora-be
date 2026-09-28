@@ -24,7 +24,7 @@ class AuthController
 
     public function login(LoginRequest $request)
     {
-        $token = $this->service->login($request->validated('email'), $request->validated('password'));
+        $token = $this->service->login($request->validated());
 
         return response()->json(['token' => $token->plainTextToken]);
     }
@@ -44,7 +44,8 @@ class AuthController
         return response()->json([
             'id' => $account->public_id,
             'role' => $account->account_type,
-            'name' => $account->email,
+            // A child account has no email (signs in via username + PIN).
+            'name' => $account->email ?? $account->username,
             'acting_as_learner_id' => $actingAsPublicId,
         ]);
     }

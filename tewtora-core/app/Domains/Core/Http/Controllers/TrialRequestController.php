@@ -20,13 +20,15 @@ class TrialRequestController
     /** docs/api-contract.md §3: POST /teachers/:id/trial-requests */
     public function store(CreateTrialRequestRequest $request, int $teacherId): TrialRequestResource
     {
+        // public_id is DB-generated (DEFAULT (UUID())) — create()'s
+        // in-memory model doesn't know it without a refresh.
         $trialRequest = $this->trialRequests->create([
             'learner_profile_id' => $request->validated('learner_profile_id'),
             'teacher_id' => $teacherId,
             'slot_starts_at' => $request->validated('slot_starts_at'),
             'duration_minutes' => $request->validated('duration_minutes'),
             'expires_at' => now()->addHours(12),
-        ]);
+        ])->refresh();
 
         return new TrialRequestResource($trialRequest);
     }

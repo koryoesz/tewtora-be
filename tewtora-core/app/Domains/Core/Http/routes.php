@@ -4,6 +4,7 @@ use App\Domains\Core\Http\Controllers\FeedbackController;
 use App\Domains\Core\Http\Controllers\MessageThreadController;
 use App\Domains\Core\Http\Controllers\MoveRequestController;
 use App\Domains\Core\Http\Controllers\PlanController;
+use App\Domains\Core\Http\Controllers\PricingController;
 use App\Domains\Core\Http\Controllers\TrialRequestController;
 use Illuminate\Support\Facades\Route;
 
@@ -45,4 +46,6 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/messages/threads/{thread:public_id}/messages', [MessageThreadController::class, 'store']);
     Route::post('/messages/threads/{thread:public_id}/read', [MessageThreadController::class, 'markRead']);
     Route::post('/messages/threads/{thread:public_id}/report', [MessageThreadController::class, 'report']);
+
+    Route::get('/pricing', [PricingController::class, 'index']);
 });

@@ -2,6 +2,7 @@
 
 namespace App\Domains\Auth\Http\Requests;
 
+use App\Domains\Auth\Models\Account;
 use App\Domains\Auth\Models\Curriculum;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -27,7 +28,17 @@ class CreateLearnerProfileRequest extends FormRequest
             // withValidator; a weak PIN set at creation just isn't blocked.
             // Acceptable since the same reset endpoint (which does block it)
             // is always available immediately after.
-            'pin' => ['sometimes', 'digits:4'],
+            //
+            // username + pin together create the child's own login account
+            // right away (email is deliberately not required for it — a
+            // child signs in with username + PIN, never email/password).
+            // Either alone is meaningless, so each requires the other.
+            'username' => [
+                'sometimes', 'required_with:pin', 'string', 'min:3', 'max:30', 'alpha_dash',
+                // Model class, not ->getTable() — see SwitchProfileRequest for why.
+                Rule::unique(Account::class, 'username')->withoutTrashed(),
+            ],
+            'pin' => ['sometimes', 'required_with:username', 'digits:4'],
         ];
     }
 }

@@ -19,6 +19,7 @@ use App\Domains\Core\Repositories\EloquentMessageRepository;
 use App\Domains\Core\Repositories\EloquentMessageThreadRepository;
 use App\Domains\Core\Repositories\EloquentMoveRequestRepository;
 use App\Domains\Core\Repositories\EloquentPlanRepository;
+use App\Domains\Core\Repositories\EloquentPricingSettingRepository;
 use App\Domains\Core\Repositories\EloquentSessionRepository;
 use App\Domains\Core\Repositories\EloquentTrialRequestRepository;
 use App\Domains\Core\Repositories\FeedbackRepositoryInterface;
@@ -26,6 +27,7 @@ use App\Domains\Core\Repositories\MessageRepositoryInterface;
 use App\Domains\Core\Repositories\MessageThreadRepositoryInterface;
 use App\Domains\Core\Repositories\MoveRequestRepositoryInterface;
 use App\Domains\Core\Repositories\PlanRepositoryInterface;
+use App\Domains\Core\Repositories\PricingSettingRepositoryInterface;
 use App\Domains\Core\Repositories\SessionRepositoryInterface;
 use App\Domains\Core\Repositories\TrialRequestRepositoryInterface;
 use Illuminate\Support\Facades\Gate;
@@ -42,6 +44,7 @@ class CoreServiceProvider extends ServiceProvider
         $this->app->bind(MoveRequestRepositoryInterface::class, EloquentMoveRequestRepository::class);
         $this->app->bind(MessageThreadRepositoryInterface::class, EloquentMessageThreadRepository::class);
         $this->app->bind(MessageRepositoryInterface::class, EloquentMessageRepository::class);
+        $this->app->bind(PricingSettingRepositoryInterface::class, EloquentPricingSettingRepository::class);
     }
 
     public function boot(): void

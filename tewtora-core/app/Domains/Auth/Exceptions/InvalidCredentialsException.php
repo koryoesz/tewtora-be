@@ -8,7 +8,10 @@ class InvalidCredentialsException extends AppException
 {
     public function __construct()
     {
-        parent::__construct('Incorrect email or password.');
+        // Covers both credential shapes AuthSessionService::login() accepts
+        // (email+password, username+pin) — deliberately doesn't say which
+        // field was wrong, or whether the account exists at all.
+        parent::__construct('Incorrect sign-in details.');
     }
 
     public function statusCode(): int

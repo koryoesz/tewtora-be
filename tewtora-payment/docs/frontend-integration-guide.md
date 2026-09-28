@@ -1,10 +1,10 @@
 # Tewtora Backend — Frontend Integration Guide
 
-**Status as of 2026-09-27.** This describes what's actually implemented and
+**Status as of 2026-09-28.** This describes what's actually implemented and
 callable right now — not the full product vision. It's derived from
 `docs/api-contract.md` (the original FE→BE contract) and
 `docs/api-gap-analysis.md`, but where those describe the target, this
-describes reality: 57 working endpoints across two services, and an
+describes reality: 58 working endpoints across two services, and an
 explicit list of what isn't built yet so you don't integrate against
 something that doesn't exist.
 
@@ -23,13 +23,18 @@ There's no registration endpoint yet — accounts have to exist already
 (seeded/created directly for now). Everything else works:
 
 ### `POST /auth/login`
+Two credential shapes, same endpoint — exactly one pair, never a mix:
 ```json
-// request
+// request — everyone except a child
 { "email": "parent@example.test", "password": "secret123" }
-// response 200
+// request — a child (no email/password; see §4's username+pin creation)
+{ "username": "zainab_z", "pin": "7391" }
+// response 200 (either shape)
 { "token": "1|abcdef123456..." }
-// response 401 on bad credentials
-{ "error": { "code": "invalid_credentials", "message": "...", "request_id": "req_..." } }
+// response 401 on bad credentials (same code/message for either shape —
+// deliberately doesn't reveal which field was wrong, or whether the
+// account/username exists at all)
+{ "error": { "code": "invalid_credentials", "message": "Incorrect sign-in details.", "request_id": "req_..." } }
 ```
 
 Send the token on every subsequent request:
@@ -111,10 +116,22 @@ gets a 404, not a 403).
 ```json
 // request
 { "name": "Ada", "grade_level": "grade-7", "curriculum": "ib" }
+// request, also creating the child's own sign-in at the same time
+{ "name": "Ada", "grade_level": "grade-7", "curriculum": "ib", "username": "ada_z", "pin": "7391" }
 ```
 `curriculum` must be an existing curriculum `code`. Returns `201` +
 `LearnerProfileResource`. `403` if the caller isn't `role: parent`
 (independent students don't add children).
+
+`username`/`pin` are optional but **each requires the other** — a
+username with no PIN (or vice versa) is `422`. When both are given, the
+child's own login account is created immediately (see §1's login shapes)
+and linked as this profile's child login. `username`: 3-30 chars,
+letters/numbers/dashes/underscores, must be unique — `422` on a
+duplicate. `pin`: exactly 4 digits, **no weak-PIN blocklist at creation**
+(that only applies to `POST /learners/{id}/pin`, below — a weak PIN set
+here can be fixed immediately after via that endpoint). A child account
+has no email at all; it never logs in with email/password.
 
 ### `PATCH /learners/{id}` 🔒 — owner only
 ```json
@@ -125,22 +142,28 @@ gets `403` here.
 
 ### `POST /learners/{id}/pin` 🔒 — owner only
 ```json
+// reset — profile already has a linked child login
 { "pin": "7391" }
+// first-time setup — profile has no login yet (wasn't created with one via POST /learners)
+{ "pin": "7391", "username": "ada_z" }
+// rename + reset together — profile already has a login
+{ "pin": "7391", "username": "ada_zed" }
 ```
-Sets or resets the child's sign-in PIN. Exactly 4 digits; a short blocklist
-of trivially weak PINs (`0000`, `1234`, `4321`, etc. — every repeated digit
-and simple run) is rejected with `422`. Stored hashed, **never returned in
-any response** — `LearnerProfileResource.has_pin` (boolean) is the only
-signal. Resetting immediately revokes the linked child login's existing
-Sanctum tokens, matching "they're signed out everywhere" — the child has to
-sign in again with the new PIN. The linked-login child itself gets `403`
-here; only the owning parent can call this.
+Sets or resets the child's sign-in PIN, and (if given) the username.
+Exactly 4 digits; a short blocklist of trivially weak PINs (`0000`,
+`1234`, `4321`, etc. — every repeated digit and simple run) is rejected
+with `422` here (unlike at `POST /learners`). Stored hashed, **never
+returned in any response** — `LearnerProfileResource.has_pin` (boolean)
+is the only signal. Resetting immediately revokes the linked child
+login's existing Sanctum tokens, matching "they're signed out
+everywhere" — the child has to sign in again with the new PIN. The
+linked-login child itself gets `403` here; only the owning parent can
+call this.
 
-**Not implemented:** the actual child-sign-in-via-PIN endpoint. This only
-covers the parent-side management half — there's no `POST /auth/child-login`
-(or similar) yet that accepts a sign-in name + PIN and issues a token.
-Setting a PIN here doesn't yet let anyone use it to log in. Ask backend
-before building the sign-in screen against this.
+**`422` (`child_username_required`) if this profile has no linked login
+yet and you don't provide `username`** — there's nothing to attach the
+PIN to otherwise. Once a login exists (either from `POST /learners` or a
+previous call here), `username` becomes optional on later calls.
 
 ### `POST /learners/{id}/archive` 🔒 — owner only
 Soft-deletes the learner (existing `deleted_at`/`SoftDeletes` mechanism, not
@@ -218,7 +241,28 @@ exists (not built either).
 
 ---
 
-## 6. Teachers
+## 6. Pricing
+
+### `GET /pricing` 🔒
+Indicative per-session rate, for the assessment budget/schedule step's
+cost calculator — shown **before** a teacher is matched, so it can't be a
+real teacher's own rate. `PricingSettingResource[]`, one row per format:
+```json
+{ "data": [
+  { "format": "one_on_one", "rate_minor": 500000, "currency_code": "NGN" },
+  { "format": "group", "rate_minor": 250000, "currency_code": "NGN" }
+] }
+```
+**This is a uniform platform-wide rate per format, not per-teacher/subject**
+— confirmed intentional for now, not a placeholder. Configurable in the
+database (`core.pricing_settings`), not hardcoded, so it can change without
+a deploy — don't cache these values for longer than the session. A real
+matched teacher's actual rate is still `GET /teachers/{id}.price_per_session_minor`
+(§7) — this endpoint is only for the pre-match estimate.
+
+---
+
+## 7. Teachers
 
 ### `GET /teachers/{id}` 🔒 — any authenticated account
 ```json
@@ -246,7 +290,7 @@ from an assessment).
 
 ---
 
-## 7. Trial requests
+## 8. Trial requests
 
 ### `POST /teachers/{teacherId}/trial-requests` 🔒 — note: numeric id, see §3
 ```json
@@ -277,7 +321,7 @@ Accepting creates a real `session` (free, `is_trial: true`) and sets
 
 ---
 
-## 8. Match requests (teacher-facing)
+## 9. Match requests (teacher-facing)
 
 ### `GET /teachers/{teacherPublicId}/match-requests` 🔒 — teacher (self) only
 Pending inbox. `TeacherMatchResource[]`, deliberately carries **no learner
@@ -296,7 +340,7 @@ name/contact info** (still anonymous at this stage):
 
 ---
 
-## 9. Plans
+## 10. Plans
 
 ### `GET /learners/{learnerPublicId}/plans` 🔒
 All plans for a learner, any status. `PlanResource[]`:
@@ -338,7 +382,7 @@ Ends the plan (status → `ended`, not deleted — history/progress survive).
 
 ---
 
-## 10. Move a lesson
+## 11. Move a lesson
 
 ### `POST /plans/{id}/move-requests` 🔒 — owner only
 ```json
@@ -379,7 +423,7 @@ the teacher accepts."
 
 ---
 
-## 11. Session feedback (teacher-facing, releases payment)
+## 12. Session feedback (teacher-facing, releases payment)
 
 ### `GET /sessions/{id}/feedback` 🔒
 `404` if no draft/submission exists yet.
@@ -394,13 +438,13 @@ All fields optional: `attendance` (`present|absent|late`), `session_notes`,
 ### `POST /sessions/{id}/feedback` 🔒 — submits, triggers payment release
 `session_notes` and `progress_rating` are **required** here (empty note is
 rejected with `422`). This writes an internal event that (once the two
-services share a real message broker — see §14) releases that session's
+services share a real message broker — see §15) releases that session's
 held payment on the Payment side. No `amount_released` field comes back in
 this response; don't build a toast that states an amount from this call.
 
 ---
 
-## 12. Messaging
+## 13. Messaging
 
 One thread per plan (a paused/ended plan keeps its own history, never
 merges into an undifferentiated stream), plus one "Tewtora support" thread
@@ -463,7 +507,7 @@ and staff is already directly in that thread.
 
 ---
 
-## 13. Admin (`/internal/*`, all require `role: admin`)
+## 14. Admin (`/internal/*`, all require `role: admin`)
 
 Non-admin callers get a `403` from all of these.
 
@@ -509,7 +553,7 @@ supply gaps) and the stuck-money screen — no endpoints exist for either.
 
 ---
 
-## 14. Payment service (separate base URL — see the table at the top)
+## 15. Payment service (separate base URL — see the table at the top)
 
 Only the teacher earnings ledger exists:
 
@@ -548,25 +592,23 @@ just unwritten code — don't estimate it as "almost done."
 
 ---
 
-## 15. Not implemented anywhere (don't build UI expecting these yet)
+## 16. Not implemented anywhere (don't build UI expecting these yet)
 
 - Account registration
 - `/matches` (ranked teacher results from an assessment)
 - Live session (join/leave/chat/whiteboard)
 - Teacher roster, teacher stats, teacher schedule diary, teacher
   availability CRUD, block-time-off
-- Checkout/payment (see §14)
+- Checkout/payment (see §15)
 - Admin matching-ops and stuck-money screens
-- Child sign-in via PIN (the PIN itself can be set — see §4 — but nothing
-  accepts one at login yet)
 - Message attachments ("Attach work"), group-plan threads (more than one
   family), typing indicators, real-time delivery, and any admin-side view
   of reported-but-not-yet-a-formal-incident messages (a report always
-  becomes a real `SafeguardingIncident` immediately — see §12)
+  becomes a real `SafeguardingIncident` immediately — see §13)
 
 ---
 
 **Questions or a mismatch between this doc and what you actually get back?**
 Treat the running code as ground truth over this file, and flag it —
 this was hand-written from the route list and resource classes, last
-updated 2026-09-27, and will drift the moment either side changes.
+updated 2026-09-28, and will drift the moment either side changes.

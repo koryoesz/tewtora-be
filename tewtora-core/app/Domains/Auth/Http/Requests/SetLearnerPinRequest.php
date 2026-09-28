@@ -2,7 +2,9 @@
 
 namespace App\Domains\Auth\Http\Requests;
 
+use App\Domains\Auth\Models\Account;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
 /**
@@ -31,6 +33,14 @@ class SetLearnerPinRequest extends FormRequest
     {
         return [
             'pin' => ['required', 'digits:4'],
+            // Only required by the controller when this profile has no
+            // linked login yet (first-time setup) — optional here since a
+            // reset on an already-linked profile doesn't need one.
+            'username' => [
+                'sometimes', 'string', 'min:3', 'max:30', 'alpha_dash',
+                // Model class, not ->getTable() — see SwitchProfileRequest for why.
+                Rule::unique(Account::class, 'username')->withoutTrashed(),
+            ],
         ];
     }
 

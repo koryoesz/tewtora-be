@@ -35,6 +35,8 @@ class MoveRequestService
     public function create(Plan $plan, int $teacherAccountId, array $data): MoveRequest
     {
         return DB::transaction(function () use ($plan, $teacherAccountId, $data) {
+            // public_id is DB-generated (DEFAULT (UUID())) — create()'s
+            // in-memory model doesn't know it without a refresh.
             $moveRequest = $this->moveRequests->create([
                 'plan_id' => $plan->id,
                 'kind' => 'move',
@@ -47,7 +49,7 @@ class MoveRequestService
                 'outside_teacher_hours' => $data['outside_teacher_hours'] ?? false,
                 'expires_at' => $data['route'] === 'move_group' ? now()->addDays(5) : now()->addDay(),
                 'gross_minor' => $plan->rate_minor,
-            ]);
+            ])->refresh();
 
             MoveApproval::create([
                 'move_request_id' => $moveRequest->id,

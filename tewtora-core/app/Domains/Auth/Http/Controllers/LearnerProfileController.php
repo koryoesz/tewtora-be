@@ -2,10 +2,12 @@
 
 namespace App\Domains\Auth\Http\Controllers;
 
+use App\Domains\Auth\Exceptions\ChildUsernameRequiredException;
 use App\Domains\Auth\Http\Requests\CreateLearnerProfileRequest;
 use App\Domains\Auth\Http\Requests\SetLearnerPinRequest;
 use App\Domains\Auth\Http\Requests\UpdateLearnerProfileRequest;
 use App\Domains\Auth\Http\Resources\LearnerProfileResource;
+use App\Domains\Auth\Models\Account;
 use App\Domains\Auth\Models\Curriculum;
 use App\Domains\Auth\Models\LearnerProfile;
 use App\Domains\Auth\Repositories\LearnerProfileRepositoryInterface;
@@ -13,6 +15,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 class LearnerProfileController
 {
@@ -38,14 +41,21 @@ class LearnerProfileController
     {
         $curriculum = Curriculum::where('code', $request->validated('curriculum'))->firstOrFail();
 
+        $childAccount = $request->filled('username')
+            ? $this->createChildAccount($request->validated('username'))
+            : null;
+
+        // public_id is DB-generated (DEFAULT (UUID())) — create()'s
+        // in-memory model doesn't know it without a refresh.
         $profile = $this->learnerProfiles->create([
             'owner_account_id' => $request->user()->id,
+            'linked_login_account_id' => $childAccount?->id,
             'profile_type' => 'child',
             'full_name' => $request->validated('name'),
             'grade_level' => $request->validated('grade_level'),
             'curriculum_id' => $curriculum->id,
             'pin_hash' => $request->has('pin') ? Hash::make($request->validated('pin')) : null,
-        ]);
+        ])->refresh();
 
         return (new LearnerProfileResource($profile->load('curriculum')))
             ->response()
@@ -76,10 +86,21 @@ class LearnerProfileController
      * check, and it can't be silently skipped by PATCH's `sometimes` rules.
      * Setting/changing a PIN revokes the child's existing sessions: the
      * frontend's own copy already promises "they're signed out everywhere
-     * and use the new PIN next time."
+     * and use the new PIN next time." Also handles first-time setup: a
+     * profile created without a username/pin (via POST /learners) has no
+     * child login yet — this is where one gets created, given a username.
      */
     public function setPin(SetLearnerPinRequest $request, LearnerProfile $learner): LearnerProfileResource
     {
+        if ($learner->linked_login_account_id === null) {
+            $request->filled('username') || throw new ChildUsernameRequiredException;
+
+            $childAccount = $this->createChildAccount($request->validated('username'));
+            $learner = $this->learnerProfiles->update($learner, ['linked_login_account_id' => $childAccount->id]);
+        } elseif ($request->filled('username')) {
+            Account::where('id', $learner->linked_login_account_id)->update(['username' => $request->validated('username')]);
+        }
+
         $learner = $this->learnerProfiles->update($learner, [
             'pin_hash' => Hash::make($request->validated('pin')),
         ]);
@@ -112,5 +133,20 @@ class LearnerProfileController
         $this->learnerProfiles->restore($learner);
 
         return new LearnerProfileResource($learner->fresh()->load('curriculum'));
+    }
+
+    /**
+     * A child never logs in with email/password — password_hash is set to
+     * an unusable random value purely to satisfy the NOT NULL column; the
+     * account authenticates via username + the linked learner profile's
+     * pin_hash instead (AuthSessionService::loginChild).
+     */
+    private function createChildAccount(string $username): Account
+    {
+        return Account::create([
+            'username' => $username,
+            'password_hash' => Hash::make(Str::random(40)),
+            'account_type' => 'child',
+        ])->refresh();
     }
 }

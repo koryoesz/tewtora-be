@@ -11,6 +11,11 @@ class EloquentAccountRepository implements AccountRepositoryInterface
         return Account::where('email', $email)->first();
     }
 
+    public function findByUsername(string $username): ?Account
+    {
+        return Account::where('username', $username)->first();
+    }
+
     public function findByPublicId(string $publicId): ?Account
     {
         return Account::where('public_id', $publicId)->first();
