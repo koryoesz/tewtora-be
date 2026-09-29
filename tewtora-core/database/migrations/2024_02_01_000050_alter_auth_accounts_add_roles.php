@@ -23,8 +23,11 @@ return new class extends Migration
     {
         // Guards against a migrate replaying from scratch (migrations table
         // reset/recreated) while auth.accounts already has this constraint
-        // from before — hit for real; see CrossDatabaseSchema's docblock.
-        if (CrossDatabaseSchema::constraintExists('auth', 'accounts', 'chk_accounts_account_type')) {
+        // AND the old inline one is actually gone — see CrossDatabaseSchema's
+        // docblock, and hasStaleInlineAccountTypeCheck() below for why both
+        // have to be checked, not just the first.
+        if (CrossDatabaseSchema::constraintExists('auth', 'accounts', 'chk_accounts_account_type')
+            && ! $this->hasStaleInlineAccountTypeCheck()) {
             return;
         }
 
@@ -34,11 +37,35 @@ return new class extends Migration
             DB::statement("ALTER TABLE auth.accounts DROP CONSTRAINT `{$constraint}`");
         }
 
-        DB::statement(<<<'SQL'
-            ALTER TABLE auth.accounts
-              ADD CONSTRAINT chk_accounts_account_type
-              CHECK (account_type IN ('parent','independent_student','child','teacher','admin'))
-        SQL);
+        // Some MariaDB versions/configs render the original CHECK with no
+        // CONSTRAINT wrapper at all — just `account_type ... CHECK (...)`
+        // directly on the column definition — which
+        // findAccountTypeCheckConstraint() can't find or drop by name since
+        // it has none (it only recognizes `CONSTRAINT \`name\` CHECK (`).
+        // Redefining the column strips it regardless of naming style, and
+        // is a harmless no-op when there's nothing to strip. This is what
+        // silently let the old restrictive check survive every previous
+        // run of this migration on that MariaDB.
+        if ($this->hasStaleInlineAccountTypeCheck()) {
+            DB::statement('ALTER TABLE auth.accounts MODIFY COLUMN account_type VARCHAR(20) NOT NULL');
+        }
+
+        if (! CrossDatabaseSchema::constraintExists('auth', 'accounts', 'chk_accounts_account_type')) {
+            DB::statement(<<<'SQL'
+                ALTER TABLE auth.accounts
+                  ADD CONSTRAINT chk_accounts_account_type
+                  CHECK (account_type IN ('parent','independent_student','child','teacher','admin'))
+            SQL);
+        }
+    }
+
+    /** Detects `` `account_type` ... CHECK (...) `` inline on the column definition itself, not as a separate named CONSTRAINT. */
+    private function hasStaleInlineAccountTypeCheck(): bool
+    {
+        $row = DB::selectOne('SHOW CREATE TABLE auth.accounts');
+        $ddl = $row?->{'Create Table'};
+
+        return $ddl !== null && preg_match('/`account_type`[^,]*CHECK\s*\(/i', $ddl) === 1;
     }
 
     public function down(): void

@@ -19,8 +19,12 @@ return new class extends Migration
     {
         // Guards against a migrate replaying from scratch (migrations table
         // reset/recreated) while auth.audit_log already has this constraint
-        // from before — hit for real; see CrossDatabaseSchema's docblock.
-        if (CrossDatabaseSchema::constraintExists('auth', 'audit_log', 'chk_audit_log_action')) {
+        // AND the old inline one is actually gone — see CrossDatabaseSchema's
+        // docblock, and hasStaleInlineActionCheck() below for why both have
+        // to be checked, not just the first (same MariaDB gap as
+        // 2024_02_01_000050_alter_auth_accounts_add_roles hit for real).
+        if (CrossDatabaseSchema::constraintExists('auth', 'audit_log', 'chk_audit_log_action')
+            && ! $this->hasStaleInlineActionCheck()) {
             return;
         }
 
@@ -30,11 +34,31 @@ return new class extends Migration
             DB::statement("ALTER TABLE auth.audit_log DROP CONSTRAINT `{$constraint}`");
         }
 
-        DB::statement(<<<'SQL'
-            ALTER TABLE auth.audit_log
-              ADD CONSTRAINT chk_audit_log_action
-              CHECK (action IN ('viewed','acted_as','approved','rejected','refunded','suspended','acted','closed','reported'))
-        SQL);
+        // Some MariaDB versions/configs render the original CHECK with no
+        // CONSTRAINT wrapper at all — just `action ... CHECK (...)` directly
+        // on the column definition — which findActionCheckConstraint()
+        // can't find or drop by name since it has none. Redefining the
+        // column strips it regardless, and is a harmless no-op otherwise.
+        if ($this->hasStaleInlineActionCheck()) {
+            DB::statement('ALTER TABLE auth.audit_log MODIFY COLUMN action VARCHAR(20) NOT NULL');
+        }
+
+        if (! CrossDatabaseSchema::constraintExists('auth', 'audit_log', 'chk_audit_log_action')) {
+            DB::statement(<<<'SQL'
+                ALTER TABLE auth.audit_log
+                  ADD CONSTRAINT chk_audit_log_action
+                  CHECK (action IN ('viewed','acted_as','approved','rejected','refunded','suspended','acted','closed','reported'))
+            SQL);
+        }
+    }
+
+    /** Detects `` `action` ... CHECK (...) `` inline on the column definition itself, not as a separate named CONSTRAINT. */
+    private function hasStaleInlineActionCheck(): bool
+    {
+        $row = DB::selectOne('SHOW CREATE TABLE auth.audit_log');
+        $ddl = $row?->{'Create Table'};
+
+        return $ddl !== null && preg_match('/`action`[^,]*CHECK\s*\(/i', $ddl) === 1;
     }
 
     public function down(): void

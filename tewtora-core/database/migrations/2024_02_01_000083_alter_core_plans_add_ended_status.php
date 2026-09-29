@@ -27,9 +27,13 @@ return new class extends Migration
     public function up(): void
     {
         // Guards against a migrate replaying from scratch (migrations table
-        // reset/recreated) while core.plans already has this constraint
-        // from before — hit for real; see CrossDatabaseSchema's docblock.
-        if (CrossDatabaseSchema::constraintExists('core', 'plans', 'chk_plans_status')) {
+        // reset/recreated) while core.plans already has this constraint AND
+        // the old inline one is actually gone — see CrossDatabaseSchema's
+        // docblock, and hasStaleInlineStatusCheck() below for why both have
+        // to be checked, not just the first (same MariaDB gap as
+        // 2024_02_01_000050_alter_auth_accounts_add_roles hit for real).
+        if (CrossDatabaseSchema::constraintExists('core', 'plans', 'chk_plans_status')
+            && ! $this->hasStaleInlineStatusCheck()) {
             return;
         }
 
@@ -39,18 +43,40 @@ return new class extends Migration
             DB::statement("ALTER TABLE core.plans DROP CONSTRAINT `{$statusCheck}`");
         }
 
-        DB::statement(<<<'SQL'
-            ALTER TABLE core.plans
-              ADD CONSTRAINT chk_plans_status
-              CHECK (status IN ('active','paused','ended'))
-        SQL);
+        // Some MariaDB versions/configs render the original CHECK with no
+        // CONSTRAINT wrapper at all — just `status ... CHECK (...)` directly
+        // on the column definition — which findStatusCheckConstraint()
+        // can't find or drop by name since it has none. Redefining the
+        // column strips it regardless, and is a harmless no-op otherwise.
+        if ($this->hasStaleInlineStatusCheck()) {
+            DB::statement("ALTER TABLE core.plans MODIFY COLUMN status VARCHAR(10) NOT NULL DEFAULT 'active'");
+        }
 
-        DB::statement('ALTER TABLE core.plans DROP CONSTRAINT chk_plans_renews_at_if_active');
+        if (! CrossDatabaseSchema::constraintExists('core', 'plans', 'chk_plans_status')) {
+            DB::statement(<<<'SQL'
+                ALTER TABLE core.plans
+                  ADD CONSTRAINT chk_plans_status
+                  CHECK (status IN ('active','paused','ended'))
+            SQL);
+        }
+
+        if (CrossDatabaseSchema::constraintExists('core', 'plans', 'chk_plans_renews_at_if_active')) {
+            DB::statement('ALTER TABLE core.plans DROP CONSTRAINT chk_plans_renews_at_if_active');
+        }
         DB::statement(<<<'SQL'
             ALTER TABLE core.plans
               ADD CONSTRAINT chk_plans_renews_at_if_active
               CHECK (status != 'active' OR renews_at IS NOT NULL)
         SQL);
+    }
+
+    /** Detects `` `status` ... CHECK (...) `` inline on the column definition itself, not as a separate named CONSTRAINT. */
+    private function hasStaleInlineStatusCheck(): bool
+    {
+        $row = DB::selectOne('SHOW CREATE TABLE core.plans');
+        $ddl = $row?->{'Create Table'};
+
+        return $ddl !== null && preg_match('/`status`[^,]*CHECK\s*\(/i', $ddl) === 1;
     }
 
     public function down(): void
