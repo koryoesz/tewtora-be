@@ -312,13 +312,24 @@ from an assessment).
 must belong to the caller. `slot_starts_at` must be in the future.
 Response `TrialRequestResource`:
 ```json
-{ "id": "uuid", "status": "pending", "slot_starts_at": "...", "duration_minutes": 30, "expires_at": "...", "session_id": null }
+{ "id": "uuid", "status": "pending", "slot_starts_at": "...", "duration_minutes": 30, "responded_at": null, "expires_at": "...", "session_id": null }
 ```
 Expires 12h after creation (fixed, not configurable per request).
 
 **Simplification vs. the original contract:** there's no `slotId` concept
 — free-trial-slot computation against a teacher's availability isn't built
 yet, so the caller picks the exact time directly.
+
+### `GET /trial-requests/{id}` 🔒 — requester or the teacher
+Check a trial request's current status — whether it's still `pending`, and
+if not, when and how the teacher responded. Same `TrialRequestResource`
+shape as the other endpoints in this section:
+```json
+{ "id": "uuid", "status": "accepted", "slot_starts_at": "...", "duration_minutes": 30, "responded_at": "2026-10-01T16:04:00+00:00", "expires_at": "...", "session_id": "uuid" }
+```
+`responded_at` is `null` until the teacher accepts or declines. `session_id`
+is only present once `status` is `accepted`. Anyone other than the
+requester or the responding teacher gets a 403.
 
 ### `DELETE /trial-requests/{id}` 🔒 — requester only
 Cancels a pending request.
@@ -328,7 +339,7 @@ Cancels a pending request.
 { "decision": "accept" }  // or "decline"
 ```
 Accepting creates a real `session` (free, `is_trial: true`) and sets
-`session_id` on the response.
+`session_id` on the response. Either decision stamps `responded_at`.
 
 ---
 

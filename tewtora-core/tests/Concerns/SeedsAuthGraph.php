@@ -9,6 +9,7 @@ use App\Domains\Auth\Models\Subject;
 use App\Domains\Auth\Models\Teacher;
 use App\Domains\Core\Models\LearnerAccountLink;
 use App\Domains\Core\Models\TeacherAccountLink;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 
 /**
@@ -97,6 +98,7 @@ trait SeedsAuthGraph
     {
         return TeacherAccountLink::create([
             'teacher_id' => $teacher->id,
+            'public_id' => $teacher->public_id,
             'account_id' => $teacher->account_id,
         ]);
     }
@@ -112,9 +114,20 @@ trait SeedsAuthGraph
      * per-role abilities; only AccountSearchService's real act-as flow
      * grants 'act-as-readonly' specifically), so this is a test-fixture
      * bug, not something the middleware needs to account for.
+     *
+     * Auth::forgetGuards() is required here, not cosmetic: the 'sanctum'
+     * guard is a RequestGuard that caches its resolved user for the life
+     * of the guard instance, which — inside a single test method — outlives
+     * any one simulated HTTP call. Without forgetting it, a second tokenFor()
+     * call for a different actor still authenticates every later request in
+     * the test as whichever account resolved first, no matter what Bearer
+     * token is actually sent (silent false-positive authorization in
+     * multi-actor tests, e.g. a "stranger" getting treated as the owner).
      */
     protected function tokenFor(Account $account, array $abilities = ['test:full-access']): string
     {
+        Auth::forgetGuards();
+
         return $account->createToken('test-'.Str::random(8), $abilities)->plainTextToken;
     }
 }

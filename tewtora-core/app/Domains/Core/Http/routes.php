@@ -34,6 +34,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/move-requests/{moveRequest:public_id}/withdraw', [MoveRequestController::class, 'withdraw']);
 
     Route::post('/teachers/{teacherId}/trial-requests', [TrialRequestController::class, 'store']);
+    Route::get('/trial-requests/{trialRequest:public_id}', [TrialRequestController::class, 'show']);
     Route::delete('/trial-requests/{trialRequest:public_id}', [TrialRequestController::class, 'destroy']);
     Route::post('/trial-requests/{trialRequest:public_id}/respond', [TrialRequestController::class, 'respond']);
 

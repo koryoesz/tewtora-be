@@ -21,6 +21,7 @@ class TrialRequest extends Model
         'slot_starts_at',
         'duration_minutes',
         'status',
+        'responded_at',
         'expires_at',
     ];
 
@@ -29,6 +30,7 @@ class TrialRequest extends Model
         return [
             'slot_starts_at' => 'datetime',
             'duration_minutes' => 'integer',
+            'responded_at' => 'datetime',
             'expires_at' => 'datetime',
             'created_at' => 'datetime',
         ];

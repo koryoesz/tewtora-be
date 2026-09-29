@@ -33,6 +33,14 @@ class TrialRequestController
         return new TrialRequestResource($trialRequest);
     }
 
+    /** GET /trial-requests/:id — requester or the teacher can check its status. */
+    public function show(Request $request, TrialRequest $trialRequest): TrialRequestResource
+    {
+        $request->user()->can('view', $trialRequest) || abort(403);
+
+        return new TrialRequestResource($trialRequest);
+    }
+
     /** DELETE /trial-requests/:id — requester cancels a pending request. */
     public function destroy(Request $request, TrialRequest $trialRequest): TrialRequestResource
     {

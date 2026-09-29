@@ -40,14 +40,14 @@ class EloquentTrialRequestRepository implements TrialRequestRepositoryInterface
 
     public function markAccepted(TrialRequest $trialRequest, int $sessionId): TrialRequest
     {
-        $trialRequest->update(['status' => 'accepted', 'session_id' => $sessionId]);
+        $trialRequest->update(['status' => 'accepted', 'session_id' => $sessionId, 'responded_at' => now()]);
 
         return $trialRequest;
     }
 
     public function markDeclined(TrialRequest $trialRequest): TrialRequest
     {
-        $trialRequest->update(['status' => 'declined']);
+        $trialRequest->update(['status' => 'declined', 'responded_at' => now()]);
 
         return $trialRequest;
     }
