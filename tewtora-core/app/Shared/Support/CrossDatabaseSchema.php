@@ -33,6 +33,14 @@ class CrossDatabaseSchema
         ) !== null;
     }
 
+    public static function columnHasDefault(string $schema, string $table, string $column): bool
+    {
+        return DB::selectOne(
+            'SELECT 1 FROM information_schema.columns WHERE table_schema = ? AND table_name = ? AND column_name = ? AND column_default IS NOT NULL',
+            [$schema, $table, $column],
+        ) !== null;
+    }
+
     /** Covers CHECK, UNIQUE, FOREIGN KEY, etc. — any named table constraint. */
     public static function constraintExists(string $schema, string $table, string $constraint): bool
     {
