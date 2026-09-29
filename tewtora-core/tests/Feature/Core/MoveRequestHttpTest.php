@@ -23,6 +23,9 @@ class MoveRequestHttpTest extends TestCase
         $this->linkTeacherToCore($teacher);
         $subject = $this->makeSubject();
 
+        // public_id is DB-generated (DEFAULT (UUID())) — create()'s
+        // in-memory model doesn't know it without a refresh, which every
+        // route in these tests needs (they're keyed by public_id).
         $plan = Plan::create([
             'learner_profile_id' => $learner->id,
             'teacher_id' => $teacher->id,
@@ -36,7 +39,7 @@ class MoveRequestHttpTest extends TestCase
             'sessions_remaining' => 4,
             'renews_at' => now()->addMonth(),
             'reference' => 'TWT-'.uniqid(),
-        ]);
+        ])->refresh();
 
         return [$plan, $parent, $teacherAccount];
     }
@@ -54,9 +57,9 @@ class MoveRequestHttpTest extends TestCase
                 'reason' => 'Clashes with a school trip.',
             ]);
 
-        $response->assertOk()
-            ->assertJsonPath('status', 'pending')
-            ->assertJsonCount(1, 'approvals');
+        $response->assertCreated()
+            ->assertJsonPath('data.status', 'pending')
+            ->assertJsonCount(1, 'data.approvals');
     }
 
     public function test_the_move_request_only_applies_once_the_teacher_accepts(): void
@@ -72,13 +75,13 @@ class MoveRequestHttpTest extends TestCase
                 'reason' => 'Clashes with a school trip.',
             ]);
 
-        $moveRequestId = $create->json('id');
+        $moveRequestId = $create->json('data.id');
         $teacherToken = $this->tokenFor($teacherAccount);
 
         $accept = $this->withHeader('Authorization', "Bearer {$teacherToken}")
             ->postJson("/api/v1/move-requests/{$moveRequestId}/accept");
 
-        $accept->assertOk()->assertJsonPath('status', 'accepted');
+        $accept->assertOk()->assertJsonPath('data.status', 'accepted');
     }
 
     public function test_a_non_party_cannot_accept_the_move_request(): void
@@ -98,7 +101,7 @@ class MoveRequestHttpTest extends TestCase
         $strangerToken = $this->tokenFor($stranger);
 
         $response = $this->withHeader('Authorization', "Bearer {$strangerToken}")
-            ->postJson("/api/v1/move-requests/{$create->json('id')}/accept");
+            ->postJson("/api/v1/move-requests/{$create->json('data.id')}/accept");
 
         $response->assertForbidden();
     }

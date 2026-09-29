@@ -31,11 +31,14 @@ class TeacherMatchHttpTest extends TestCase
             'curriculum_id' => 1,
         ]);
 
+        // public_id is DB-generated (DEFAULT (UUID())) — create()'s
+        // in-memory model doesn't know it without a refresh, which every
+        // route in these tests needs (they're keyed by public_id).
         $match = TeacherMatch::create([
             'learner_profile_id' => $learnerView->id,
             'teacher_id' => $teacherView->id,
             'status' => 'proposed',
-        ]);
+        ])->refresh();
 
         return [$match, $teacherAccount, $teacherView];
     }
@@ -48,7 +51,7 @@ class TeacherMatchHttpTest extends TestCase
         $response = $this->withHeader('Authorization', "Bearer {$token}")
             ->postJson("/api/v1/match-requests/{$match->public_id}/accept");
 
-        $response->assertOk()->assertJsonPath('status', 'accepted');
+        $response->assertOk()->assertJsonPath('data.status', 'accepted');
     }
 
     public function test_a_different_teacher_cannot_respond_to_someone_elses_match(): void
@@ -71,7 +74,11 @@ class TeacherMatchHttpTest extends TestCase
         $response = $this->withHeader('Authorization', "Bearer {$token}")
             ->postJson("/api/v1/match-requests/{$match->public_id}/decline", []);
 
-        $response->assertStatus(422)->assertJsonValidationErrors('reason');
+        // Not assertJsonValidationErrors() — this app's error envelope puts
+        // field errors under error.fields, not Laravel's default top-level
+        // errors key.
+        $response->assertStatus(422)
+            ->assertJsonPath('error.fields.reason.0', 'The reason field is required.');
     }
 
     public function test_a_match_cannot_be_accepted_twice(): void

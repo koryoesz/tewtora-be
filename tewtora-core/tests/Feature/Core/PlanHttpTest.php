@@ -16,6 +16,9 @@ class PlanHttpTest extends TestCase
     {
         $subject = $this->makeSubject();
 
+        // public_id is DB-generated (DEFAULT (UUID())) — create()'s
+        // in-memory model doesn't know it without a refresh, which every
+        // route in these tests needs (they're keyed by public_id).
         return Plan::create(array_merge([
             'learner_profile_id' => $learner->id,
             'teacher_id' => $teacher->id,
@@ -29,7 +32,7 @@ class PlanHttpTest extends TestCase
             'sessions_remaining' => 4,
             'renews_at' => now()->addMonth(),
             'reference' => 'TWT-'.uniqid(),
-        ], $overrides));
+        ], $overrides))->refresh();
     }
 
     public function test_the_owning_parent_can_pause_their_plan(): void
@@ -44,7 +47,7 @@ class PlanHttpTest extends TestCase
         $response = $this->withHeader('Authorization', "Bearer {$token}")
             ->postJson("/api/v1/plans/{$plan->public_id}/pause");
 
-        $response->assertOk()->assertJsonPath('status', 'paused');
+        $response->assertOk()->assertJsonPath('data.status', 'paused');
     }
 
     public function test_a_stranger_cannot_pause_someone_elses_plan(): void
@@ -94,8 +97,8 @@ class PlanHttpTest extends TestCase
             ->postJson("/api/v1/plans/{$plan->public_id}/rebook", ['session_count' => 4]);
 
         $response->assertOk()
-            ->assertJsonPath('status', 'active')
-            ->assertJsonPath('sessions_remaining', 6);
+            ->assertJsonPath('data.status', 'active')
+            ->assertJsonPath('data.sessions_remaining', 6);
     }
 
     public function test_ending_a_plan_returns_the_refund_owed(): void
