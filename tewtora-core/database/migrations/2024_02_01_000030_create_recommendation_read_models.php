@@ -1,5 +1,6 @@
 <?php
 
+use App\Shared\Support\CrossDatabaseSchema;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 
@@ -19,6 +20,13 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Guards against a migrate replaying from scratch (migrations table
+        // reset/recreated) while recommendation.* still has its tables from
+        // before — hit for real; see CrossDatabaseSchema's docblock.
+        if (CrossDatabaseSchema::tableExists('recommendation', 'learner_profile_view')) {
+            return;
+        }
+
         DB::unprepared(<<<'SQL'
             CREATE TABLE recommendation.learner_profile_view (
               id             BIGINT UNSIGNED PRIMARY KEY,

@@ -1,5 +1,6 @@
 <?php
 
+use App\Shared\Support\CrossDatabaseSchema;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 
@@ -15,6 +16,13 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Guards against a migrate replaying from scratch (migrations table
+        // reset/recreated) while this column already exists from before —
+        // hit for real; see CrossDatabaseSchema's docblock.
+        if (CrossDatabaseSchema::columnExists('core', 'learner_account_links', 'public_id')) {
+            return;
+        }
+
         DB::unprepared(<<<'SQL'
             ALTER TABLE core.learner_account_links
               ADD COLUMN public_id CHAR(36) NOT NULL AFTER learner_profile_id,

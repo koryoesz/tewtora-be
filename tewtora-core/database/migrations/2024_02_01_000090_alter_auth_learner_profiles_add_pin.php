@@ -1,5 +1,6 @@
 <?php
 
+use App\Shared\Support\CrossDatabaseSchema;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 
@@ -19,6 +20,13 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Guards against a migrate replaying from scratch (migrations table
+        // reset/recreated) while this column already exists from before —
+        // hit for real; see CrossDatabaseSchema's docblock.
+        if (CrossDatabaseSchema::columnExists('auth', 'learner_profiles', 'pin_hash')) {
+            return;
+        }
+
         DB::unprepared(<<<'SQL'
             ALTER TABLE auth.learner_profiles
               ADD COLUMN pin_hash VARCHAR(255) NULL AFTER linked_login_account_id;

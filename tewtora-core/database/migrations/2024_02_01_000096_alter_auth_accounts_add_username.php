@@ -1,5 +1,6 @@
 <?php
 
+use App\Shared\Support\CrossDatabaseSchema;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 
@@ -18,6 +19,13 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Guards against a migrate replaying from scratch (migrations table
+        // reset/recreated) while this column already exists from before —
+        // hit for real; see CrossDatabaseSchema's docblock.
+        if (CrossDatabaseSchema::columnExists('auth', 'accounts', 'username')) {
+            return;
+        }
+
         DB::unprepared(<<<'SQL'
             ALTER TABLE auth.accounts
               MODIFY COLUMN email VARCHAR(255) NULL COLLATE utf8mb4_unicode_ci,

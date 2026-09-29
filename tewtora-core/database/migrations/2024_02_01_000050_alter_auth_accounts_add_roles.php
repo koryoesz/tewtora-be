@@ -1,5 +1,6 @@
 <?php
 
+use App\Shared\Support\CrossDatabaseSchema;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 
@@ -20,6 +21,13 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Guards against a migrate replaying from scratch (migrations table
+        // reset/recreated) while auth.accounts already has this constraint
+        // from before — hit for real; see CrossDatabaseSchema's docblock.
+        if (CrossDatabaseSchema::constraintExists('auth', 'accounts', 'chk_accounts_account_type')) {
+            return;
+        }
+
         $constraint = $this->findAccountTypeCheckConstraint();
 
         if ($constraint !== null) {

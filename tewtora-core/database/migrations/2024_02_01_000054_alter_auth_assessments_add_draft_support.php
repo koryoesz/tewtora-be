@@ -1,5 +1,6 @@
 <?php
 
+use App\Shared\Support\CrossDatabaseSchema;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 
@@ -30,6 +31,13 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Guards against a migrate replaying from scratch (migrations table
+        // reset/recreated) while auth.assessments already has this column
+        // from before — hit for real; see CrossDatabaseSchema's docblock.
+        if (CrossDatabaseSchema::columnExists('auth', 'assessments', 'status')) {
+            return;
+        }
+
         DB::unprepared(<<<'SQL'
             ALTER TABLE auth.assessments
               ADD COLUMN status VARCHAR(10) NOT NULL DEFAULT 'draft'

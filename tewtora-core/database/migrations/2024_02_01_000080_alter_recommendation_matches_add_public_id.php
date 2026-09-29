@@ -1,5 +1,6 @@
 <?php
 
+use App\Shared\Support\CrossDatabaseSchema;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -24,6 +25,13 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Guards against a migrate replaying from scratch (migrations table
+        // reset/recreated) while this column already exists from before —
+        // hit for real; see CrossDatabaseSchema's docblock.
+        if (CrossDatabaseSchema::columnExists('recommendation', 'matches', 'public_id')) {
+            return;
+        }
+
         DB::unprepared(<<<'SQL'
             ALTER TABLE recommendation.matches
               ADD COLUMN public_id CHAR(36) NULL AFTER id;

@@ -1,5 +1,6 @@
 <?php
 
+use App\Shared\Support\CrossDatabaseSchema;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 
@@ -17,6 +18,13 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Guards against a migrate replaying from scratch (migrations table
+        // reset/recreated) while core.feedback already has this column from
+        // before — hit for real; see CrossDatabaseSchema's docblock.
+        if (CrossDatabaseSchema::columnExists('core', 'feedback', 'attendance')) {
+            return;
+        }
+
         DB::unprepared(<<<'SQL'
             ALTER TABLE core.feedback
               ADD COLUMN attendance VARCHAR(15) NULL

@@ -1,5 +1,6 @@
 <?php
 
+use App\Shared\Support\CrossDatabaseSchema;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 
@@ -19,6 +20,13 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Guards against a migrate replaying from scratch (migrations table
+        // reset/recreated) while auth.teachers already has these columns
+        // from before — hit for real; see CrossDatabaseSchema's docblock.
+        if (CrossDatabaseSchema::columnExists('auth', 'teachers', 'max_group_size')) {
+            return;
+        }
+
         DB::unprepared(<<<'SQL'
             ALTER TABLE auth.teachers
               ADD COLUMN max_group_size SMALLINT UNSIGNED NULL AFTER preferred_format,

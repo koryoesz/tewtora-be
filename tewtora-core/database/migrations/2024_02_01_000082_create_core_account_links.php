@@ -1,5 +1,6 @@
 <?php
 
+use App\Shared\Support\CrossDatabaseSchema;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 
@@ -23,6 +24,13 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Guards against a migrate replaying from scratch (migrations table
+        // reset/recreated) while core.* still has its tables from before —
+        // hit for real; see CrossDatabaseSchema's docblock.
+        if (CrossDatabaseSchema::tableExists('core', 'learner_account_links')) {
+            return;
+        }
+
         DB::unprepared(<<<'SQL'
             CREATE TABLE core.learner_account_links (
               learner_profile_id       BIGINT UNSIGNED PRIMARY KEY,
