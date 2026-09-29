@@ -51,9 +51,17 @@ Revokes the current token. Returns `204`, no body.
   "id": "uuid",            // account public_id
   "role": "parent",        // parent | independent_student | child | teacher | admin
   "name": "parent@example.test",   // currently just the email — no display-name field exists yet
-  "acting_as_learner_id": "uuid-or-null"
+  "acting_as_learner_id": "uuid-or-null",
+  "teacher_id": "uuid"     // role: teacher only — see below
 }
 ```
+**`teacher_id` is present only when `role: teacher`.** It's a *different*
+UUID from `id` — `id` is the account's own public_id, `teacher_id` is the
+linked `auth.teachers` row's, which is what `GET /teachers/{id}` and
+`GET /teachers/{id}/match-requests` actually key on. This is the field to
+use to resolve a logged-in teacher's own profile id — don't hardcode it,
+it changes on every reseed.
+
 `role` always comes from the token server-side — sending a different role
 in a query string or body does nothing.
 

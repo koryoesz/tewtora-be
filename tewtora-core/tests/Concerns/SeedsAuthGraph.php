@@ -66,12 +66,15 @@ trait SeedsAuthGraph
     {
         $account = $overrides['account_id'] ?? $this->makeAccount(['account_type' => 'teacher'])->id;
 
+        // public_id is DB-generated (DEFAULT (UUID())) — create()'s
+        // in-memory model doesn't know it without a refresh, which every
+        // route in these tests needs (they're keyed by public_id).
         return Teacher::create(array_merge([
             'account_id' => $account,
             'years_experience' => 3,
             'preferred_format' => 'both',
             'rate_minor' => 500000,
-        ], $overrides));
+        ], $overrides))->refresh();
     }
 
     /**

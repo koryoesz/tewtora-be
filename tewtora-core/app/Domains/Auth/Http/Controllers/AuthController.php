@@ -47,6 +47,14 @@ class AuthController
             // A child account has no email (signs in via username + PIN).
             'name' => $account->email ?? $account->username,
             'acting_as_learner_id' => $actingAsPublicId,
+            // The account's own public_id is a different UUID from the
+            // linked auth.teachers row's — GET /teachers/{id} and
+            // GET /teachers/{id}/match-requests need the latter, and had
+            // no way to resolve it from the session at all. Same-domain
+            // lookup (Account::teacher(), both auth.* tables) — not a
+            // cross-domain reach. Only present for a teacher session, not
+            // a null field on everyone else's.
+            ...($account->account_type === 'teacher' ? ['teacher_id' => $account->teacher?->public_id] : []),
         ]);
     }
 

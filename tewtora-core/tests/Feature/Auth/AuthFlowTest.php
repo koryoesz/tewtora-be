@@ -53,6 +53,34 @@ class AuthFlowTest extends TestCase
         $response->assertOk()->assertJsonPath('role', 'teacher');
     }
 
+    /**
+     * The account's own public_id is a different UUID from the linked
+     * auth.teachers row's — GET /teachers/{id} and .../match-requests need
+     * the latter, and a teacher session previously had no way to resolve
+     * it at all (frontend was hardcoding it, breaking on every reseed).
+     */
+    public function test_session_includes_the_teacher_profile_id_for_a_teacher(): void
+    {
+        $profile = $this->makeTeacher();
+        $token = $this->tokenFor($profile->account);
+
+        $response = $this->withHeader('Authorization', "Bearer {$token}")
+            ->getJson('/api/v1/auth/session');
+
+        $response->assertOk()->assertJsonPath('teacher_id', $profile->public_id);
+    }
+
+    public function test_session_omits_teacher_id_for_a_non_teacher(): void
+    {
+        $parent = $this->makeAccount();
+        $token = $this->tokenFor($parent);
+
+        $response = $this->withHeader('Authorization', "Bearer {$token}")
+            ->getJson('/api/v1/auth/session');
+
+        $response->assertOk()->assertJsonMissingPath('teacher_id');
+    }
+
     public function test_switch_profile_sets_a_readable_cookie_for_an_owned_learner(): void
     {
         $parent = $this->makeAccount();
