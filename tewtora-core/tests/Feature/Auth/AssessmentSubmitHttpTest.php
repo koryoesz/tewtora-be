@@ -35,7 +35,11 @@ class AssessmentSubmitHttpTest extends TestCase
                 'consent_given' => false,
             ]);
 
-        $response->assertStatus(422)->assertJsonValidationErrors('consent_given');
+        // Not assertJsonValidationErrors() — this app's error envelope puts
+        // field errors under error.fields, not Laravel's default top-level
+        // errors key that helper looks for.
+        $response->assertStatus(422)->assertJsonPath('error.code', 'validation_failed')
+            ->assertJsonPath('error.fields.consent_given.0', 'Parental consent is required for a child profile.');
     }
 
     public function test_submitting_a_child_assessment_with_consent_succeeds(): void

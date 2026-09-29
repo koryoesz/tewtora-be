@@ -16,11 +16,23 @@ class SubmitAssessmentRequest extends FormRequest
 
     public function rules(): array
     {
-        // Deliberately no 'sometimes' — that would skip validation
-        // entirely (including the consent rule) when the field is omitted
-        // from the request, which is exactly the case a minor's missing
-        // consent needs to be caught.
+        // Submit takes the same fields as the draft save (the contract's
+        // "same fields as above, all now conceptually final") — without
+        // these, $request->validated() strips everything but
+        // consent_given, so AssessmentController::submit() would write a
+        // row missing learning_goals/etc. even for a brand new assessment
+        // never saved as a draft first, tripping
+        // chk_learning_goals_present_if_submitted on every submit
+        // regardless of what was actually sent. Reuses
+        // SaveAssessmentDraftRequest's rules as the single source of truth
+        // for that shared field set rather than duplicating it.
+        //
+        // consent_given itself deliberately has no 'sometimes' — that
+        // would skip validation entirely (including the consent rule) when
+        // the field is omitted from the request, which is exactly the
+        // case a minor's missing consent needs to be caught.
         return [
+            ...(new SaveAssessmentDraftRequest)->rules(),
             'consent_given' => ['nullable', 'boolean', new ConsentRequiredIfMinor($this->route('learner'))],
         ];
     }

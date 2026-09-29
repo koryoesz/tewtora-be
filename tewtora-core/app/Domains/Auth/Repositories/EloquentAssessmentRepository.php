@@ -2,6 +2,7 @@
 
 namespace App\Domains\Auth\Repositories;
 
+use App\Domains\Auth\Exceptions\AssessmentIncompleteException;
 use App\Domains\Auth\Models\Assessment;
 
 class EloquentAssessmentRepository implements AssessmentRepositoryInterface
@@ -31,6 +32,15 @@ class EloquentAssessmentRepository implements AssessmentRepositoryInterface
     public function submit(Assessment $assessment, array $data): Assessment
     {
         $assessment->fill(array_merge($data, ['status' => 'submitted', 'submitted_at' => now()]));
+
+        // Mirrors chk_learning_goals_present_if_submitted — checked here so
+        // an assessment submitted with no learning goals (whether from
+        // this request or never saved as a draft) gets a clean 422 instead
+        // of the DB CHECK rejecting the insert as an uncaught 500.
+        if (empty($assessment->learning_goals)) {
+            throw new AssessmentIncompleteException;
+        }
+
         $assessment->save();
 
         return $assessment;

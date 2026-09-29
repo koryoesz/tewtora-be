@@ -50,13 +50,16 @@ trait SeedsAuthGraph
         $owner = $overrides['owner_account_id'] ?? $this->makeAccount()->id;
         $curriculum = $overrides['curriculum_id'] ?? $this->makeCurriculum()->id;
 
+        // public_id is DB-generated (DEFAULT (UUID())) — create()'s
+        // in-memory model doesn't know it without a refresh, which every
+        // route in these tests needs (they're keyed by public_id).
         return LearnerProfile::create(array_merge([
             'owner_account_id' => $owner,
             'profile_type' => 'own',
             'full_name' => 'Test Learner',
             'grade_level' => 'grade-6',
             'curriculum_id' => $curriculum,
-        ], $overrides));
+        ], $overrides))->refresh();
     }
 
     protected function makeTeacher(array $overrides = []): Teacher
