@@ -9,9 +9,10 @@ use Tests\Concerns\SeedsAuthGraph;
 use Tests\TestCase;
 
 /**
- * Covers 2024_02_01_000054_alter_auth_assessments_add_draft_support: the
- * relaxed NOT NULLs, the status-conditioned CHECK, and the rebuilt consent
- * trigger (docs/api-contract.md §2 / docs/api-gap-analysis.md §2).
+ * Covers 2024_02_01_000054_alter_auth_assessments_add_draft_support (the
+ * relaxed NOT NULLs and the rebuilt consent trigger) and
+ * 2024_02_01_000098 (learning_goals no longer required to submit) —
+ * docs/api-contract.md §2 / docs/api-gap-analysis.md §2.
  */
 class AssessmentDraftTest extends TestCase
 {
@@ -31,13 +32,12 @@ class AssessmentDraftTest extends TestCase
         $this->assertNull($assessment->fresh()->learning_goals);
     }
 
-    public function test_submitting_without_learning_goals_is_rejected(): void
+    /** A learning goal is not required to submit — see 2024_02_01_000098. */
+    public function test_submitting_without_learning_goals_succeeds(): void
     {
         $learner = $this->makeLearnerProfile();
 
-        $this->expectException(QueryException::class);
-
-        Assessment::create([
+        $assessment = Assessment::create([
             'learner_profile_id' => $learner->id,
             'status' => 'submitted',
             'budget_tier' => 'standard',
@@ -45,6 +45,8 @@ class AssessmentDraftTest extends TestCase
             'session_frequency' => 'weekly',
             'availability' => [],
         ]);
+
+        $this->assertSame('submitted', $assessment->fresh()->status);
     }
 
     public function test_submitting_with_learning_goals_succeeds(): void

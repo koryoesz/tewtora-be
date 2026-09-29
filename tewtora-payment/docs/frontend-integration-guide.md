@@ -1,6 +1,6 @@
 # Tewtora Backend — Frontend Integration Guide
 
-**Status as of 2026-09-28.** This describes what's actually implemented and
+**Status as of 2026-09-29.** This describes what's actually implemented and
 callable right now — not the full product vision. It's derived from
 `docs/api-contract.md` (the original FE→BE contract) and
 `docs/api-gap-analysis.md`, but where those describe the target, this
@@ -220,14 +220,17 @@ matched teacher picks the actual class time within it, same as before.
 server-side depended on it, since the column was unvalidated until now.
 
 ### `POST /learners/{id}/assessment/submit` 🔒
-Same fields as above, all now conceptually "final," plus:
+Same fields as above (all optional — including `learning_goals`, which was
+required until now but no longer is), plus:
 ```json
 { "consent_given": true }
 ```
 **`consent_given` is required and must be `true` if the learner is a
 `child` profile — omit it (or send `false`) for a minor and you get a
 `422` with a `consent_given` field error.** Independent students / adult
-learners never need this field.
+learners never need this field. Whatever fields you don't resend keep
+whatever was already saved from a prior draft `PUT`, if any — sending
+nothing but `consent_given` submits the assessment as-is.
 
 Response:
 ```json
@@ -611,4 +614,4 @@ just unwritten code — don't estimate it as "almost done."
 **Questions or a mismatch between this doc and what you actually get back?**
 Treat the running code as ground truth over this file, and flag it —
 this was hand-written from the route list and resource classes, last
-updated 2026-09-28, and will drift the moment either side changes.
+updated 2026-09-29, and will drift the moment either side changes.

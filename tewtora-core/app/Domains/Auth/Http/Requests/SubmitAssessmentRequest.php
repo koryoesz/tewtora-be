@@ -20,12 +20,12 @@ class SubmitAssessmentRequest extends FormRequest
         // "same fields as above, all now conceptually final") — without
         // these, $request->validated() strips everything but
         // consent_given, so AssessmentController::submit() would write a
-        // row missing learning_goals/etc. even for a brand new assessment
-        // never saved as a draft first, tripping
-        // chk_learning_goals_present_if_submitted on every submit
-        // regardless of what was actually sent. Reuses
+        // row missing whatever was actually sent, even for a brand new
+        // assessment never saved as a draft first. Reuses
         // SaveAssessmentDraftRequest's rules as the single source of truth
-        // for that shared field set rather than duplicating it.
+        // for that shared field set rather than duplicating it — all still
+        // nullable, since none of them (learning_goals included — see
+        // 2024_02_01_000098) are required to submit.
         //
         // consent_given itself deliberately has no 'sometimes' — that
         // would skip validation entirely (including the consent rule) when

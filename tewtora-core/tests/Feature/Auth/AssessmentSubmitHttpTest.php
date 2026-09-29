@@ -57,6 +57,23 @@ class AssessmentSubmitHttpTest extends TestCase
         $response->assertOk()->assertJsonPath('assessment.status', 'submitted');
     }
 
+    /** A learning goal is not required to submit — see 2024_02_01_000098. */
+    public function test_submitting_without_a_learning_goal_succeeds(): void
+    {
+        $learner = $this->makeLearnerProfile();
+        $token = $this->tokenFor($learner->owner);
+
+        $response = $this->withHeader('Authorization', "Bearer {$token}")
+            ->postJson("/api/v1/learners/{$learner->public_id}/assessment/submit", [
+                'budget_tier' => 'standard',
+                'preferred_format' => 'one_on_one',
+                'session_frequency' => 'weekly',
+                'availability' => [],
+            ]);
+
+        $response->assertOk()->assertJsonPath('assessment.status', 'submitted');
+    }
+
     public function test_a_stranger_cannot_submit_an_assessment_for_someone_elses_learner(): void
     {
         $learner = $this->makeLearnerProfile();
