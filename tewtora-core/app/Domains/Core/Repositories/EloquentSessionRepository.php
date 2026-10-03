@@ -29,6 +29,7 @@ class EloquentSessionRepository implements SessionRepositoryInterface
     {
         return Session::where('teacher_id', $teacherId)
             ->where('status', 'scheduled')
+            ->with('plan')
             ->orderBy('scheduled_at')
             ->get();
     }
@@ -38,7 +39,7 @@ class EloquentSessionRepository implements SessionRepositoryInterface
         // No status filter — mirrors PlanController::history's own per-plan
         // query exactly, for the same resource shape either way.
         return Session::where('teacher_id', $teacherId)
-            ->with('feedback')
+            ->with(['feedback', 'plan'])
             ->orderByDesc('scheduled_at')
             ->get();
     }

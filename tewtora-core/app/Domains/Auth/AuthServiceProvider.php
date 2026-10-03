@@ -15,8 +15,10 @@ use App\Domains\Auth\Repositories\EloquentAccountRepository;
 use App\Domains\Auth\Repositories\EloquentAssessmentRepository;
 use App\Domains\Auth\Repositories\EloquentCurriculumRepository;
 use App\Domains\Auth\Repositories\EloquentLearnerProfileRepository;
+use App\Domains\Auth\Repositories\EloquentSubjectRepository;
 use App\Domains\Auth\Repositories\EloquentTeacherRepository;
 use App\Domains\Auth\Repositories\LearnerProfileRepositoryInterface;
+use App\Domains\Auth\Repositories\SubjectRepositoryInterface;
 use App\Domains\Auth\Repositories\TeacherRepositoryInterface;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
@@ -30,6 +32,7 @@ class AuthServiceProvider extends ServiceProvider
         $this->app->bind(TeacherRepositoryInterface::class, EloquentTeacherRepository::class);
         $this->app->bind(AssessmentRepositoryInterface::class, EloquentAssessmentRepository::class);
         $this->app->bind(CurriculumRepositoryInterface::class, EloquentCurriculumRepository::class);
+        $this->app->bind(SubjectRepositoryInterface::class, EloquentSubjectRepository::class);
     }
 
     public function boot(): void

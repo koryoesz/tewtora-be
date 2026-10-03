@@ -22,6 +22,11 @@ class EloquentPlanRepository implements PlanRepositoryInterface
         return Plan::where('learner_profile_id', $learnerProfileId)->get();
     }
 
+    public function forTeacher(int $teacherId): Collection
+    {
+        return Plan::where('teacher_id', $teacherId)->get();
+    }
+
     public function create(array $data): Plan
     {
         return Plan::create($data);

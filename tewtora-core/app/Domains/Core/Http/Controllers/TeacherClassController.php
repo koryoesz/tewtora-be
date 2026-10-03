@@ -4,7 +4,9 @@ namespace App\Domains\Core\Http\Controllers;
 
 use App\Domains\Core\Http\Resources\PlanHistoryEntryResource;
 use App\Domains\Core\Http\Resources\PlanNextSessionResource;
+use App\Domains\Core\Http\Resources\PlanResource;
 use App\Domains\Core\Models\TeacherAccountLink;
+use App\Domains\Core\Repositories\PlanRepositoryInterface;
 use App\Domains\Core\Repositories\SessionRepositoryInterface;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -25,6 +27,7 @@ class TeacherClassController
 {
     public function __construct(
         private readonly SessionRepositoryInterface $sessions,
+        private readonly PlanRepositoryInterface $plans,
     ) {}
 
     public function nextSessions(Request $request, string $teacherPublicId): AnonymousResourceCollection
@@ -39,6 +42,19 @@ class TeacherClassController
         $teacherId = $this->resolveOwnTeacherId($request, $teacherPublicId);
 
         return PlanHistoryEntryResource::collection($this->sessions->historyForTeacher($teacherId));
+    }
+
+    /**
+     * Lets a caller label a next-sessions/history row by its plan_id
+     * (format, days, time_of_day, reference) — there's no subject or
+     * learner name available here (CLAUDE.md's cross-domain rule; see
+     * PlanRepositoryInterface::forTeacher's docblock).
+     */
+    public function plans(Request $request, string $teacherPublicId): AnonymousResourceCollection
+    {
+        $teacherId = $this->resolveOwnTeacherId($request, $teacherPublicId);
+
+        return PlanResource::collection($this->plans->forTeacher($teacherId));
     }
 
     /** Scoped to the authenticated teacher's own id only — never another teacher's, even another authenticated teacher's. */

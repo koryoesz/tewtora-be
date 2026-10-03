@@ -8,6 +8,7 @@ use App\Domains\Auth\Http\Controllers\AssessmentController;
 use App\Domains\Auth\Http\Controllers\AuthController;
 use App\Domains\Auth\Http\Controllers\CurriculumController;
 use App\Domains\Auth\Http\Controllers\LearnerProfileController;
+use App\Domains\Auth\Http\Controllers\SubjectController;
 use App\Domains\Auth\Http\Controllers\TeacherController;
 use Illuminate\Support\Facades\Route;
 
@@ -24,9 +25,11 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/auth/session', [AuthController::class, 'session']);
     Route::post('/auth/switch-profile', [AuthController::class, 'switchProfile']);
 
-    // Lets a curriculum picker (e.g. "Add a child") read the real seeded
-    // set instead of hardcoding codes — see CurriculumSeeder's docblock.
+    // Lets a curriculum/subject picker (e.g. "Add a child", teacher
+    // onboarding) read the real seeded set instead of hardcoding codes —
+    // see CurriculumSeeder/SubjectSeeder's docblocks.
     Route::get('/curricula', [CurriculumController::class, 'index']);
+    Route::get('/subjects', [SubjectController::class, 'index']);
 
     Route::get('/learners', [LearnerProfileController::class, 'index']);
     Route::get('/learners/{learner:public_id}', [LearnerProfileController::class, 'show']);

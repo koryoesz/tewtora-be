@@ -41,6 +41,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // resolves it through its own teacher_account_links read model.
     Route::get('/teachers/{teacherPublicId}/next-sessions', [TeacherClassController::class, 'nextSessions']);
     Route::get('/teachers/{teacherPublicId}/history', [TeacherClassController::class, 'history']);
+    Route::get('/teachers/{teacherPublicId}/plans', [TeacherClassController::class, 'plans']);
     Route::get('/trial-requests/{trialRequest:public_id}', [TrialRequestController::class, 'show']);
     Route::delete('/trial-requests/{trialRequest:public_id}', [TrialRequestController::class, 'destroy']);
     Route::post('/trial-requests/{trialRequest:public_id}/respond', [TrialRequestController::class, 'respond']);

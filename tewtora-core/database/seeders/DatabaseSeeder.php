@@ -17,6 +17,7 @@ class DatabaseSeeder extends Seeder
         // Real platform config — runs everywhere, including production.
         $this->call(PricingSettingsSeeder::class);
         $this->call(CurriculumSeeder::class);
+        $this->call(SubjectSeeder::class);
 
         // Known-password accounts — never seed these in production.
         if (! app()->environment('production')) {

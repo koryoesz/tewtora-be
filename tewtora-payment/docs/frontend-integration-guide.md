@@ -1,10 +1,10 @@
 # Tewtora Backend — Frontend Integration Guide
 
-**Status as of 2026-09-29.** This describes what's actually implemented and
+**Status as of 2026-10-03.** This describes what's actually implemented and
 callable right now — not the full product vision. It's derived from
 `docs/api-contract.md` (the original FE→BE contract) and
 `docs/api-gap-analysis.md`, but where those describe the target, this
-describes reality: 58 working endpoints across two services, and an
+describes reality: 66 working endpoints across two services, and an
 explicit list of what isn't built yet so you don't integrate against
 something that doesn't exist.
 
@@ -179,11 +179,44 @@ a separate flag). Returns the updated `LearnerProfileResource`
 (`archived: true`). Archived learners drop out of `GET /learners` and
 `GET /learners/{id}` automatically (`404` on the latter). Plans, sessions,
 feedback, and payment history are untouched — this only hides the profile
-itself.
+itself. **`409` (`learner_has_active_plan`) if the child currently has an
+active plan** — end or pause it first. A paused plan doesn't block this.
 
 ### `POST /learners/{id}/restore` 🔒 — owner only
 Reverses an archive. Returns the updated `LearnerProfileResource`
 (`archived: false`).
+
+### `POST /learners/{id}/pause-sign-in` 🔒 — owner only
+### `POST /learners/{id}/resume-sign-in` 🔒 — owner only
+No body. Disables/re-enables the child's own `username`+`pin` login
+(§1), independently of archive/restore above — the profile stays fully
+visible and manageable to the parent; only the child's own sign-in stops
+working. Adds `sign_in_paused: boolean` to `LearnerProfileResource`.
+Pausing immediately revokes the child's existing Sanctum tokens (same
+"signed out everywhere" behavior `POST /learners/{id}/pin` already has).
+A paused child's `POST /auth/login` attempt — even with the correct PIN —
+gets `401` with `error.code: "child_sign_in_paused"` (not the generic
+`invalid_credentials`), since the credentials were actually correct.
+
+### `GET /curricula` 🔒
+```json
+{ "data": [{ "code": "ib", "display_name": "International Baccalaureate" }, ...] }
+```
+Returns every active curriculum code, for populating a picker (e.g. "Add a
+child") instead of hardcoding codes — `POST /learners`'s `curriculum`
+field validates against this same table. Previously only `"ib"` was ever
+seeded (a `TestAccountsSeeder` side effect that never ran outside
+dev/staging); `ib`, `nigerian`, `british`, `american`, and
+`us_common_core` are now seeded in every environment via a new
+production-safe `CurriculumSeeder`.
+
+### `GET /subjects` 🔒
+Same shape and same fix as `GET /curricula` just above, for `auth.subjects`
+— it had the identical gap (only `"mathematics"` was ever seeded outside
+dev/staging). A new `SubjectSeeder` now seeds `mathematics`,
+`further_maths`, `physics`, `chemistry`, `biology`, `english`,
+`economics`, and `coding` in every environment. `PATCH /teachers/{id}`'s
+`subjects` field (§7) validates against this same table.
 
 ---
 
@@ -288,13 +321,57 @@ matched teacher's actual rate is still `GET /teachers/{id}.price_per_session_min
   "rating_avg": null,
   "verification": { "government_id": "approved", "credentials": "in_review", "teaching_demo": "pending" },
   "subjects": ["mathematics"],
-  "curricula": ["ib"]
+  "curricula": ["ib"],
+  "levels": ["year_10_11"],
+  "availability": [{ "day": "thu", "starts_at": "16:00", "ends_at": "20:00" }]
 }
 ```
 Note the verification states are `pending|in_review|approved|rejected` —
 **not** the `confirmed|outstanding|problem` wording the original contract
 used in its admin section (§14); we standardized on one vocabulary
 backend-side. Map these values in the UI, don't expect the other set.
+
+### `PATCH /teachers/{id}` 🔒 — the teacher themself only
+A teacher editing their own profile — the onboarding wizard's steps 1–3
+plus bio (`needed-endpoints-teacher-onboarding.md` §3). Every field is
+optional (`sometimes`) and additive to the `GET` shape above:
+```json
+{
+  "subjects": ["mathematics"],
+  "curricula": ["british"],
+  "levels": ["year_10_11"],
+  "format": "both",
+  "price_per_session_minor": 1400000,
+  "years_teaching": 6,
+  "availability": [{ "day": "thu", "starts_at": "16:00", "ends_at": "20:00" }],
+  "about": "..."
+}
+```
+`levels` is a small fixed enum — `primary_1_3 | primary_4_6 | jss_1_3 |
+sss_1_3 | year_7_9 | year_10_11 | ib_a_level` — stored as JSON, not a
+lookup table (it's closed and rarely changes, unlike subjects/curricula).
+`availability` is the same `{day, starts_at, ends_at}` shape §5's
+assessment availability uses — writes into `auth.teacher_availability`,
+replacing whatever was there before (not merged).
+
+**`about` validation:** `422` if under 40 characters, or if it contains
+anything that looks like a phone number, email, or link — same
+contact-info pattern messaging already strips (§13), except a bio is
+rejected outright rather than silently redacted, since it's authored once
+and reviewed rather than sent live.
+
+**Never touches `verification_status` or the verification checks** —
+editing a profile field isn't "re-applying." There's currently no
+endpoint for a teacher to read their *own* verification-check states
+(`government_id`/`credentials`/`teaching_demo`) distinct from what
+`GET /teachers/{id}` already returns to anyone — flagging this as still
+open from `needed-endpoints-teacher-onboarding.md` §4, not resolved by
+this endpoint.
+
+**Not built by this endpoint:** the "waiting families" matching-funnel
+preview (`needed-endpoints-teacher-onboarding.md` §2) — that's the same
+not-yet-built ranked-matching gap as `/matches` (§16), just hit from the
+teacher side. No live counts exist to preview against yet.
 
 **Not implemented:** teacher search/listing, `/matches` (ranked results
 from an assessment).
@@ -312,7 +389,7 @@ from an assessment).
 must belong to the caller. `slot_starts_at` must be in the future.
 Response `TrialRequestResource`:
 ```json
-{ "id": "uuid", "status": "pending", "slot_starts_at": "...", "duration_minutes": 30, "responded_at": null, "expires_at": "...", "session_id": null }
+{ "id": "uuid", "status": "pending", "slot_starts_at": "...", "countered_starts_at": null, "duration_minutes": 30, "decline_reason": null, "decline_reason_message": null, "responded_at": null, "expires_at": "...", "session_id": null }
 ```
 Expires 12h after creation (fixed, not configurable per request).
 
@@ -332,14 +409,50 @@ is only present once `status` is `accepted`. Anyone other than the
 requester or the responding teacher gets a 403.
 
 ### `DELETE /trial-requests/{id}` 🔒 — requester only
-Cancels a pending request.
+Withdraws a `pending` **or** `countered` request (not just pending — a
+family can withdraw after a counter-offer too). Doesn't count against the
+teacher's acceptance-rate stat.
 
-### `POST /trial-requests/{id}/respond` 🔒 — teacher only
+### `POST /trial-requests/{id}/respond` 🔒 — see below for who
+Who may call this, and which `decision`s are valid, depend on the
+request's **current** `status`:
+- **`pending`** — only the teacher. `decision`: `accept | decline | counter`.
+- **`countered`** — only the family (the original requester). `decision`:
+  `accept | decline`, against the *countered* time, not the original.
+
 ```json
-{ "decision": "accept" }  // or "decline"
+// teacher accepts (status: pending)
+{ "decision": "accept" }
+// teacher declines, with an optional reason
+{ "decision": "decline", "reason": "budget" }  // full | level | budget | other
+// teacher counters with a different time
+{ "decision": "counter", "alt_starts_at": "2026-10-09T16:00:00Z" }
+// family responds to a counter-offer (status: countered)
+{ "decision": "accept" }  // or "decline" — no reason; that's the teacher's content, not theirs
 ```
-Accepting creates a real `session` (free, `is_trial: true`) and sets
-`session_id` on the response. Either decision stamps `responded_at`.
+Accepting (either an original or a countered time) creates a real
+`session` (free, `is_trial: true`) and sets `session_id` on the response.
+Every decision stamps `responded_at`. `reason` is optional on a plain
+decline — the old `{"decision":"decline"}` with no reason still works
+unchanged.
+
+**`decline_reason`/`decline_reason_message` on `TrialRequestResource`:**
+`decline_reason` is the small fixed code (`full|level|budget|other`) and
+is the same either side. `decline_reason_message` carries **two different
+wordings depending on who's asking** — the teacher's own candid version
+on the teacher's read, a softened version on the family's read of the
+*same* request. The teacher's own wording is never sent to the family
+under any field.
+
+**`countered_starts_at`:** set only once a teacher counters a `pending`
+request — `slot_starts_at` still holds the *original* ask, unchanged.
+Once present, the family's `accept`/`decline` responds against
+`countered_starts_at`, not `slot_starts_at`.
+
+A trial's post-session note has no new endpoint — it's the existing
+`PUT`/`POST /sessions/{id}/feedback` (§12) against the real (free)
+session a trial's acceptance already creates. Confirmed working against
+a trial session the same as a billed one.
 
 ---
 
@@ -380,6 +493,37 @@ Owner, linked child (view-only), or the plan's teacher can all view.
 - `next-sessions`: `[{ "id": "uuid", "starts_at": "...", "is_live": false }]`
 - `goals`: `[{ "id": "uuid", "label": "...", "pct": 40.0 }]`
 - `history`: `[{ "id": "uuid", "session_date": "...", "status": "completed", "score_out_of_5": 5, "note": "...", "next_steps": "..." }]` — `score_out_of_5`/`note`/`next_steps` are `null` until that session's feedback is submitted.
+
+### `GET /teachers/{teacherPublicId}/next-sessions`, `GET /teachers/{teacherPublicId}/history` 🔒 — the teacher themself only
+The same two shapes as above, but aggregated across **every** plan that
+teacher teaches, not scoped to one plan (`needed-endpoints-classes.md`
+§3's "a teacher currently has no way to list their own classes"). Reads
+`core.sessions` directly by `teacher_id`, so it doesn't need to enumerate
+the teacher's plans first. `{teacherPublicId}` here is `core.teacher_
+account_links.public_id`, the same id `GET /teachers/{id}` uses — scoped
+to the caller's own id only, even if the caller is a different
+authenticated teacher.
+
+**`plan_id` is now included on both** — `{ "id": "uuid", "starts_at": "...", "is_live": false, "plan_id": "uuid" }` /
+`{ "id": "uuid", "plan_id": "uuid", "session_date": "...", ... }` — added
+specifically for this teacher-aggregate case (the per-plan endpoint above
+doesn't send it; the caller already has the plan). Without it there was no
+way to tell which of a teacher's several plans a row belonged to, let
+alone label it with anything.
+
+### `GET /teachers/{teacherPublicId}/plans` 🔒 — the teacher themself only
+Every plan this teacher teaches, any status — same `PlanResource` shape
+§10 documents above. Pairs with `plan_id` on the two endpoints just
+above: fetch this once, key it by `id`, and use it to label a
+next-session/history row (`format`, `days`, `time_of_day`, `reference`) —
+there's no subject or learner-name field here at all, by design
+(`core.plans.subject_id`/`learner_profile_id` are cross-schema identities
+Core doesn't resolve to a display name; see CLAUDE.md's hard rule on not
+reaching into another domain's models).
+
+**Still missing, same gap either side (§2 of the Classes doc):** a
+meeting-room link and session end time/duration (only `starts_at`/`is_live`
+exist) on `PlanNextSessionResource`.
 
 ### `POST /plans/{id}/pause` 🔒 — owner only
 Returns the updated `PlanResource` (`status: "paused"`, `renews_at: null`).
@@ -633,4 +777,4 @@ just unwritten code — don't estimate it as "almost done."
 **Questions or a mismatch between this doc and what you actually get back?**
 Treat the running code as ground truth over this file, and flag it —
 this was hand-written from the route list and resource classes, last
-updated 2026-09-29, and will drift the moment either side changes.
+updated 2026-10-03, and will drift the moment either side changes.
