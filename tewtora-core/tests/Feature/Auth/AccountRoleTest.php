@@ -4,6 +4,7 @@ namespace Tests\Feature\Auth;
 
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Concerns\SeedsAuthGraph;
 use Tests\TestCase;
 
@@ -18,7 +19,7 @@ class AccountRoleTest extends TestCase
     use RefreshDatabase;
     use SeedsAuthGraph;
 
-    /** @dataProvider validAccountTypes */
+    #[DataProvider('validAccountTypes')]
     public function test_each_of_the_five_roles_is_accepted(string $accountType): void
     {
         $account = $this->makeAccount(['account_type' => $accountType]);

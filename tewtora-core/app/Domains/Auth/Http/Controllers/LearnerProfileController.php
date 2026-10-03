@@ -3,6 +3,7 @@
 namespace App\Domains\Auth\Http\Controllers;
 
 use App\Domains\Auth\Exceptions\ChildUsernameRequiredException;
+use App\Domains\Auth\Exceptions\LearnerHasActivePlanException;
 use App\Domains\Auth\Http\Requests\CreateLearnerProfileRequest;
 use App\Domains\Auth\Http\Requests\SetLearnerPinRequest;
 use App\Domains\Auth\Http\Requests\UpdateLearnerProfileRequest;
@@ -11,6 +12,7 @@ use App\Domains\Auth\Models\Account;
 use App\Domains\Auth\Models\Curriculum;
 use App\Domains\Auth\Models\LearnerProfile;
 use App\Domains\Auth\Repositories\LearnerProfileRepositoryInterface;
+use App\Domains\Core\Services\PlanService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -21,6 +23,7 @@ class LearnerProfileController
 {
     public function __construct(
         private readonly LearnerProfileRepositoryInterface $learnerProfiles,
+        private readonly PlanService $plans,
     ) {}
 
     public function index(Request $request): AnonymousResourceCollection
@@ -114,6 +117,13 @@ class LearnerProfileController
     {
         $request->user()->can('manage', $learner) || abort(403);
 
+        // Onboarding spec: "refuse if the child has an active plan." Goes
+        // through Core's PlanService (CLAUDE.md's hard rule), not a direct
+        // query against core.plans.
+        if ($this->plans->hasActivePlan($learner->id)) {
+            throw new LearnerHasActivePlanException;
+        }
+
         $this->learnerProfiles->archive($learner);
 
         return new LearnerProfileResource($learner->fresh()->load('curriculum'));
@@ -133,6 +143,31 @@ class LearnerProfileController
         $this->learnerProfiles->restore($learner);
 
         return new LearnerProfileResource($learner->fresh()->load('curriculum'));
+    }
+
+    /**
+     * Disables the child's own username+PIN login (AuthSessionService::
+     * loginChild) while leaving the profile itself, and archive/restore,
+     * completely untouched — deliberately a separate toggle from archive,
+     * never folded into update()'s `sometimes` PATCH semantics, same
+     * reasoning as setPin() having its own action.
+     */
+    public function pauseSignIn(Request $request, LearnerProfile $learner): LearnerProfileResource
+    {
+        $request->user()->can('manage', $learner) || abort(403);
+
+        $learner = $this->learnerProfiles->pauseSignIn($learner);
+
+        return new LearnerProfileResource($learner->load('curriculum'));
+    }
+
+    public function resumeSignIn(Request $request, LearnerProfile $learner): LearnerProfileResource
+    {
+        $request->user()->can('manage', $learner) || abort(403);
+
+        $learner = $this->learnerProfiles->resumeSignIn($learner);
+
+        return new LearnerProfileResource($learner->load('curriculum'));
     }
 
     /**

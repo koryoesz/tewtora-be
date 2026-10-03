@@ -25,6 +25,24 @@ class EloquentSessionRepository implements SessionRepositoryInterface
             ->get();
     }
 
+    public function nextSessionsForTeacher(int $teacherId): Collection
+    {
+        return Session::where('teacher_id', $teacherId)
+            ->where('status', 'scheduled')
+            ->orderBy('scheduled_at')
+            ->get();
+    }
+
+    public function historyForTeacher(int $teacherId): Collection
+    {
+        // No status filter — mirrors PlanController::history's own per-plan
+        // query exactly, for the same resource shape either way.
+        return Session::where('teacher_id', $teacherId)
+            ->with('feedback')
+            ->orderByDesc('scheduled_at')
+            ->get();
+    }
+
     public function create(array $data): Session
     {
         return Session::create($data);

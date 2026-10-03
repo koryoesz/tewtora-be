@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Auth;
 
+use App\Domains\Core\Models\Plan;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Concerns\SeedsAuthGraph;
 use Tests\TestCase;
@@ -23,7 +24,7 @@ class LearnerProfileHttpTest extends TestCase
             'curriculum' => 'ib',
         ]);
 
-        $response->assertCreated()->assertJsonPath('name', 'Ada');
+        $response->assertCreated()->assertJsonPath('data.name', 'Ada');
     }
 
     public function test_an_independent_student_cannot_add_a_child(): void
@@ -71,5 +72,61 @@ class LearnerProfileHttpTest extends TestCase
             ->patchJson("/api/v1/learners/{$learner->public_id}", ['name' => 'New Name']);
 
         $response->assertForbidden();
+    }
+
+    public function test_removing_a_child_with_an_active_plan_is_refused(): void
+    {
+        $parent = $this->makeAccount();
+        $learner = $this->makeLearnerProfile(['owner_account_id' => $parent->id]);
+        $teacher = $this->makeTeacher();
+        $subject = $this->makeSubject();
+        Plan::create([
+            'learner_profile_id' => $learner->id,
+            'teacher_id' => $teacher->id,
+            'subject_id' => $subject->id,
+            'format' => 'one_on_one',
+            'days' => ['tue'],
+            'time_of_day' => '16:00',
+            'status' => 'active',
+            'rate_minor' => 500000,
+            'sessions_per_month' => 4,
+            'sessions_remaining' => 4,
+            'renews_at' => now()->addMonth(),
+            'reference' => 'TWT-'.uniqid(),
+        ]);
+        $token = $this->tokenFor($parent);
+
+        $response = $this->withHeader('Authorization', "Bearer {$token}")
+            ->postJson("/api/v1/learners/{$learner->public_id}/archive");
+
+        $response->assertStatus(409)->assertJsonPath('error.code', 'learner_has_active_plan');
+    }
+
+    public function test_removing_a_child_with_only_a_paused_plan_succeeds(): void
+    {
+        $parent = $this->makeAccount();
+        $learner = $this->makeLearnerProfile(['owner_account_id' => $parent->id]);
+        $teacher = $this->makeTeacher();
+        $subject = $this->makeSubject();
+        Plan::create([
+            'learner_profile_id' => $learner->id,
+            'teacher_id' => $teacher->id,
+            'subject_id' => $subject->id,
+            'format' => 'one_on_one',
+            'days' => ['tue'],
+            'time_of_day' => '16:00',
+            'status' => 'paused',
+            'rate_minor' => 500000,
+            'sessions_per_month' => 4,
+            'sessions_remaining' => 4,
+            'renews_at' => null,
+            'reference' => 'TWT-'.uniqid(),
+        ]);
+        $token = $this->tokenFor($parent);
+
+        $response = $this->withHeader('Authorization', "Bearer {$token}")
+            ->postJson("/api/v1/learners/{$learner->public_id}/archive");
+
+        $response->assertOk()->assertJsonPath('data.archived', true);
     }
 }

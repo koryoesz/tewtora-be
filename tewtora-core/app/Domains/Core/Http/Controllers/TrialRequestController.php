@@ -41,7 +41,11 @@ class TrialRequestController
         return new TrialRequestResource($trialRequest);
     }
 
-    /** DELETE /trial-requests/:id — requester cancels a pending request. */
+    /**
+     * DELETE /trial-requests/:id — requester cancels a pending OR countered
+     * request (docs/needed-endpoints-trial-requests.md §4: withdrawing
+     * after a counter-offer, not just while still pending).
+     */
     public function destroy(Request $request, TrialRequest $trialRequest): TrialRequestResource
     {
         $request->user()->can('manage', $trialRequest) || abort(403);
@@ -49,12 +53,18 @@ class TrialRequestController
         return new TrialRequestResource($this->service->cancel($trialRequest));
     }
 
-    /** POST /trial-requests/:id/respond — teacher accept/decline. */
+    /**
+     * POST /trial-requests/:id/respond — teacher accept/decline/counter
+     * against a pending request, or the family accept/decline against a
+     * countered one (see RespondTrialRequestRequest's docblock for which
+     * side is authorized for which status).
+     */
     public function respond(RespondTrialRequestRequest $request, TrialRequest $trialRequest): TrialRequestResource
     {
         $trialRequest = match ($request->validated('decision')) {
             'accept' => $this->service->accept($trialRequest),
-            'decline' => $this->service->decline($trialRequest),
+            'decline' => $this->service->decline($trialRequest, $request->validated('reason')),
+            'counter' => $this->service->counter($trialRequest, $request->validated('alt_starts_at')),
         };
 
         return new TrialRequestResource($trialRequest);

@@ -6,6 +6,7 @@ use App\Domains\Auth\Http\Controllers\AdminSafeguardingController;
 use App\Domains\Auth\Http\Controllers\AdminVerificationController;
 use App\Domains\Auth\Http\Controllers\AssessmentController;
 use App\Domains\Auth\Http\Controllers\AuthController;
+use App\Domains\Auth\Http\Controllers\CurriculumController;
 use App\Domains\Auth\Http\Controllers\LearnerProfileController;
 use App\Domains\Auth\Http\Controllers\TeacherController;
 use Illuminate\Support\Facades\Route;
@@ -23,6 +24,10 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/auth/session', [AuthController::class, 'session']);
     Route::post('/auth/switch-profile', [AuthController::class, 'switchProfile']);
 
+    // Lets a curriculum picker (e.g. "Add a child") read the real seeded
+    // set instead of hardcoding codes — see CurriculumSeeder's docblock.
+    Route::get('/curricula', [CurriculumController::class, 'index']);
+
     Route::get('/learners', [LearnerProfileController::class, 'index']);
     Route::get('/learners/{learner:public_id}', [LearnerProfileController::class, 'show']);
     Route::post('/learners', [LearnerProfileController::class, 'store']);
@@ -32,12 +37,22 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // Raw string, not {learner:public_id} binding — that binding excludes
     // soft-deleted rows, which is exactly the one this restores.
     Route::post('/learners/{learnerPublicId}/restore', [LearnerProfileController::class, 'restore']);
+    // Disables/re-enables the child's own username+PIN login
+    // (AuthSessionService::loginChild) — independent of archive/restore
+    // above, see 2024_02_01_000104's docblock.
+    Route::post('/learners/{learner:public_id}/pause-sign-in', [LearnerProfileController::class, 'pauseSignIn']);
+    Route::post('/learners/{learner:public_id}/resume-sign-in', [LearnerProfileController::class, 'resumeSignIn']);
 
     Route::get('/learners/{learner:public_id}/assessment', [AssessmentController::class, 'show']);
     Route::put('/learners/{learner:public_id}/assessment', [AssessmentController::class, 'saveDraft']);
     Route::post('/learners/{learner:public_id}/assessment/submit', [AssessmentController::class, 'submit']);
 
     Route::get('/teachers/{teacher:public_id}', [TeacherController::class, 'show']);
+    // A teacher editing their own subjects/curricula/levels/format/rate/
+    // years/availability/bio — additive to the GET shape above, see
+    // UpdateTeacherProfileRequest's docblock for why this never touches
+    // verification_status.
+    Route::patch('/teachers/{teacher:public_id}', [TeacherController::class, 'update']);
 });
 
 Route::prefix('internal')->middleware(['auth:sanctum', 'admin'])->group(function () {

@@ -2,6 +2,7 @@
 
 namespace App\Domains\Auth\Services;
 
+use App\Domains\Auth\Exceptions\ChildSignInPausedException;
 use App\Domains\Auth\Exceptions\InvalidCredentialsException;
 use App\Domains\Auth\Models\Account;
 use App\Domains\Auth\Models\LearnerProfile;
@@ -72,6 +73,13 @@ class AuthSessionService
 
         if (! $profile || ! $profile->pin_hash || ! Hash::check($pin, $profile->pin_hash)) {
             throw new InvalidCredentialsException;
+        }
+
+        // Checked after the PIN, not before: a wrong PIN against a paused
+        // profile should still read as "incorrect sign-in details," not
+        // leak that the PIN would otherwise have been right.
+        if ($profile->sign_in_paused) {
+            throw new ChildSignInPausedException;
         }
 
         return $account->createToken('web', self::ABILITIES['child'] ?? []);

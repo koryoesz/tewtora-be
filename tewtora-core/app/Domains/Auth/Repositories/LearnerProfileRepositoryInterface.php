@@ -22,4 +22,8 @@ interface LearnerProfileRepositoryInterface
     public function archive(LearnerProfile $profile): void;
 
     public function restore(LearnerProfile $profile): void;
+
+    public function pauseSignIn(LearnerProfile $profile): LearnerProfile;
+
+    public function resumeSignIn(LearnerProfile $profile): LearnerProfile;
 }

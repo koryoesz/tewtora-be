@@ -45,9 +45,17 @@ class EloquentTrialRequestRepository implements TrialRequestRepositoryInterface
         return $trialRequest;
     }
 
-    public function markDeclined(TrialRequest $trialRequest): TrialRequest
+    public function markDeclined(TrialRequest $trialRequest, ?string $reason = null): TrialRequest
     {
-        $trialRequest->update(['status' => 'declined', 'responded_at' => now()]);
+        $trialRequest->update(['status' => 'declined', 'decline_reason' => $reason, 'responded_at' => now()]);
+
+        return $trialRequest;
+    }
+
+    /** From 'pending' only (teacher offering an alternate instead of accepting/declining outright). */
+    public function markCountered(TrialRequest $trialRequest, string $altStartsAt): TrialRequest
+    {
+        $trialRequest->update(['status' => 'countered', 'countered_starts_at' => $altStartsAt, 'responded_at' => now()]);
 
         return $trialRequest;
     }

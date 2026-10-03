@@ -4,7 +4,7 @@ namespace App\Domains\Auth\Http\Controllers;
 
 use App\Domains\Auth\Http\Requests\LoginRequest;
 use App\Domains\Auth\Http\Requests\SwitchProfileRequest;
-use App\Domains\Auth\Models\LearnerProfile;
+use App\Domains\Auth\Repositories\LearnerProfileRepositoryInterface;
 use App\Domains\Auth\Services\AuthSessionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cookie;
@@ -20,6 +20,7 @@ class AuthController
 
     public function __construct(
         private readonly AuthSessionService $service,
+        private readonly LearnerProfileRepositoryInterface $learnerProfiles,
     ) {}
 
     public function login(LoginRequest $request)
@@ -66,8 +67,14 @@ class AuthController
      */
     public function switchProfile(SwitchProfileRequest $request)
     {
-        $learner = LearnerProfile::where('public_id', $request->validated('learner_id'))->firstOrFail();
+        // findByPublicId() bypasses LearnerProfile's ownedByAccount global
+        // scope — a direct ::where() lookup would make a stranger's request
+        // silently find nothing and 404 before the explicit policy check
+        // below ever runs, when docs/frontend-integration-guide.md promises
+        // a 403 here.
+        $learner = $this->learnerProfiles->findByPublicId($request->validated('learner_id'));
 
+        $learner ?: abort(404);
         $request->user()->can('view', $learner) || abort(403);
 
         Cookie::queue(Cookie::make(

@@ -46,4 +46,22 @@ class EloquentLearnerProfileRepository implements LearnerProfileRepositoryInterf
     {
         $profile->restore();
     }
+
+    public function pauseSignIn(LearnerProfile $profile): LearnerProfile
+    {
+        $profile->update(['sign_in_paused' => true]);
+
+        // Matches setPin()'s own revoke-on-change behavior: a paused child
+        // shouldn't keep using a token issued before the pause.
+        $profile->linkedLoginAccount?->tokens()->delete();
+
+        return $profile;
+    }
+
+    public function resumeSignIn(LearnerProfile $profile): LearnerProfile
+    {
+        $profile->update(['sign_in_paused' => false]);
+
+        return $profile;
+    }
 }

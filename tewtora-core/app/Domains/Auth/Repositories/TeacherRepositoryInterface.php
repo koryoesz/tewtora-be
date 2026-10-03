@@ -12,4 +12,9 @@ interface TeacherRepositoryInterface
     public function findByPublicId(string $publicId): ?Teacher;
 
     public function pendingVerification(): Collection;
+
+    /**
+     * @param  array{columns?: array, subjects?: ?array, curricula?: ?array, availability?: ?array}  $data
+     */
+    public function updateProfile(Teacher $teacher, array $data): Teacher;
 }

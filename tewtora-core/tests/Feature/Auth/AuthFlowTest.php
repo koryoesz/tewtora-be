@@ -91,7 +91,10 @@ class AuthFlowTest extends TestCase
             ->postJson('/api/v1/auth/switch-profile', ['learner_id' => $learner->public_id]);
 
         $response->assertOk();
-        $response->assertCookie('acting_as_learner_id', $learner->public_id);
+        // Not the default encrypted=true — the app sets this cookie with
+        // raw: true (AuthController::switchProfile) so a Next.js Server
+        // Component can read it directly without decrypting it.
+        $response->assertCookie('acting_as_learner_id', $learner->public_id, false);
     }
 
     public function test_switch_profile_to_a_learner_you_do_not_own_is_rejected(): void

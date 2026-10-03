@@ -52,7 +52,11 @@ class AdminVerificationHttpTest extends TestCase
                 'note' => '',
             ]);
 
-        $response->assertStatus(422)->assertJsonValidationErrors('note');
+        // Not assertJsonValidationErrors() — this app's error envelope puts
+        // field errors under error.fields, not Laravel's default top-level
+        // errors key.
+        $response->assertStatus(422)
+            ->assertJsonPath('error.fields.note.0', 'The note field is required.');
     }
 
     public function test_approving_with_all_checks_confirmed_succeeds(): void
@@ -70,6 +74,6 @@ class AdminVerificationHttpTest extends TestCase
                 'note' => 'All checks confirmed.',
             ]);
 
-        $response->assertOk()->assertJsonPath('status', 'approved');
+        $response->assertOk()->assertJsonPath('data.status', 'approved');
     }
 }

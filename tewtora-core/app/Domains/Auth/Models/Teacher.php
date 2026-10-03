@@ -16,6 +16,7 @@ class Teacher extends Model
         'years_experience',
         'bio',
         'preferred_format',
+        'levels',
         'max_group_size',
         'rate_minor',
         'currency_code',
@@ -31,6 +32,7 @@ class Teacher extends Model
     {
         return [
             'years_experience' => 'integer',
+            'levels' => 'array',
             'max_group_size' => 'integer',
             'rate_minor' => 'integer',
             'id_verified_at' => 'datetime',

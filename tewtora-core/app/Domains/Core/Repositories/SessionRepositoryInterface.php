@@ -14,6 +14,12 @@ interface SessionRepositoryInterface
 
     public function upcomingFor(int $learnerProfileId): Collection;
 
+    /** Every scheduled session across every plan this teacher teaches — the teacher-side aggregate PlanController::nextSessions mirrors per-plan. */
+    public function nextSessionsForTeacher(int $teacherId): Collection;
+
+    /** Every past/non-scheduled session across every plan this teacher teaches, feedback eager-loaded — mirrors PlanController::history. */
+    public function historyForTeacher(int $teacherId): Collection;
+
     public function create(array $data): Session;
 
     public function transitionStatus(Session $session, string $status): Session;

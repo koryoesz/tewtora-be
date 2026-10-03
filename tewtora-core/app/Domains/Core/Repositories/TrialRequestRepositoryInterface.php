@@ -19,7 +19,9 @@ interface TrialRequestRepositoryInterface
 
     public function markAccepted(TrialRequest $trialRequest, int $sessionId): TrialRequest;
 
-    public function markDeclined(TrialRequest $trialRequest): TrialRequest;
+    public function markDeclined(TrialRequest $trialRequest, ?string $reason = null): TrialRequest;
+
+    public function markCountered(TrialRequest $trialRequest, string $altStartsAt): TrialRequest;
 
     public function markCancelled(TrialRequest $trialRequest): TrialRequest;
 }

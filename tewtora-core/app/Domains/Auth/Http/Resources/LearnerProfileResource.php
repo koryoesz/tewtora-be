@@ -17,6 +17,9 @@ class LearnerProfileResource extends JsonResource
             'grade_label' => $this->grade_level,
             'has_pin' => $this->hasPin(),
             'archived' => $this->trashed(),
+            // Independent of `archived` — a profile can be archived AND
+            // sign-in-paused at once (see 2024_02_01_000104's docblock).
+            'sign_in_paused' => $this->isSignInPaused(),
             'curriculum' => $this->whenLoaded('curriculum', fn () => $this->curriculum->code),
             'assessment_complete' => Assessment::where('learner_profile_id', $this->id)
                 ->where('status', 'submitted')

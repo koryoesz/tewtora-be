@@ -61,4 +61,15 @@ class PlanService
     {
         return $plan->sessions_remaining * $plan->rate_minor;
     }
+
+    /**
+     * Auth's onboarding spec needs "refuse to remove a child with an
+     * active plan" — a cross-domain check, so it goes through this public
+     * service method (CLAUDE.md's hard rule) rather than Auth querying
+     * core.plans directly.
+     */
+    public function hasActivePlan(int $learnerProfileId): bool
+    {
+        return $this->plans->forLearner($learnerProfileId)->contains('status', 'active');
+    }
 }

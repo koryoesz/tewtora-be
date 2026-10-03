@@ -3,6 +3,7 @@
 namespace Tests\Feature\Auth;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Auth;
 use Tests\Concerns\SeedsAuthGraph;
 use Tests\TestCase;
 
@@ -28,7 +29,11 @@ class AdminActAsHttpTest extends TestCase
                 'reason' => 'just because',
             ]);
 
-        $response->assertStatus(422)->assertJsonValidationErrors('reason');
+        // Not assertJsonValidationErrors() — this app's error envelope puts
+        // field errors under error.fields, not Laravel's default top-level
+        // errors key.
+        $response->assertStatus(422)
+            ->assertJsonPath('error.fields.reason.0', 'The selected reason is invalid.');
     }
 
     public function test_an_act_as_token_cannot_call_a_mutating_endpoint(): void
@@ -43,6 +48,13 @@ class AdminActAsHttpTest extends TestCase
             ]);
 
         $actAsToken = $actAs->json('token');
+
+        // The 'sanctum' guard caches its resolved user for the life of the
+        // guard instance, which outlives a single simulated request within
+        // a test method — without forgetting it, this second request would
+        // silently keep authenticating as $admin (the first token used),
+        // never actually exercising the act-as token at all.
+        Auth::forgetGuards();
 
         // Try to mutate something as the acted-as account — must be
         // rejected purely because the token is read-only, regardless of
@@ -63,6 +75,8 @@ class AdminActAsHttpTest extends TestCase
             ->postJson("/api/v1/internal/accounts/{$target->public_id}/act-as", [
                 'reason' => 'Parent asked support for help',
             ]);
+
+        Auth::forgetGuards();
 
         $response = $this->withHeader('Authorization', "Bearer {$actAs->json('token')}")
             ->getJson('/api/v1/auth/session');

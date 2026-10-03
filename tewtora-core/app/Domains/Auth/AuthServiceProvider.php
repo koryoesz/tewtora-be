@@ -10,8 +10,10 @@ use App\Domains\Auth\Policies\LearnerProfilePolicy;
 use App\Domains\Auth\Policies\TeacherPolicy;
 use App\Domains\Auth\Repositories\AccountRepositoryInterface;
 use App\Domains\Auth\Repositories\AssessmentRepositoryInterface;
+use App\Domains\Auth\Repositories\CurriculumRepositoryInterface;
 use App\Domains\Auth\Repositories\EloquentAccountRepository;
 use App\Domains\Auth\Repositories\EloquentAssessmentRepository;
+use App\Domains\Auth\Repositories\EloquentCurriculumRepository;
 use App\Domains\Auth\Repositories\EloquentLearnerProfileRepository;
 use App\Domains\Auth\Repositories\EloquentTeacherRepository;
 use App\Domains\Auth\Repositories\LearnerProfileRepositoryInterface;
@@ -27,6 +29,7 @@ class AuthServiceProvider extends ServiceProvider
         $this->app->bind(LearnerProfileRepositoryInterface::class, EloquentLearnerProfileRepository::class);
         $this->app->bind(TeacherRepositoryInterface::class, EloquentTeacherRepository::class);
         $this->app->bind(AssessmentRepositoryInterface::class, EloquentAssessmentRepository::class);
+        $this->app->bind(CurriculumRepositoryInterface::class, EloquentCurriculumRepository::class);
     }
 
     public function boot(): void

@@ -24,6 +24,7 @@ class LearnerProfile extends Model
         'grade_level',
         'curriculum_id',
         'pin_hash',
+        'sign_in_paused',
     ];
 
     /** Never serialize the hash — LearnerProfileResource exposes only has_pin. */
@@ -36,6 +37,7 @@ class LearnerProfile extends Model
         return [
             'date_of_birth' => 'date',
             'deleted_at' => 'datetime',
+            'sign_in_paused' => 'boolean',
         ];
     }
 
@@ -88,5 +90,10 @@ class LearnerProfile extends Model
     public function hasPin(): bool
     {
         return $this->pin_hash !== null;
+    }
+
+    public function isSignInPaused(): bool
+    {
+        return (bool) $this->sign_in_paused;
     }
 }

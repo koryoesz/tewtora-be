@@ -23,11 +23,14 @@ trait SeedsAuthGraph
 {
     protected function makeAccount(array $overrides = []): Account
     {
+        // public_id is DB-generated (DEFAULT (UUID())) — create()'s
+        // in-memory model doesn't know it without a refresh, which every
+        // route in these tests needs (they're keyed by public_id).
         return Account::create(array_merge([
             'email' => 'user-'.uniqid().'@example.test',
             'password_hash' => password_hash('password', PASSWORD_ARGON2ID),
             'account_type' => 'parent',
-        ], $overrides));
+        ], $overrides))->refresh();
     }
 
     protected function makeCurriculum(array $overrides = []): Curriculum

@@ -2,6 +2,8 @@
 
 namespace App\Domains\Core\Services;
 
+use App\Shared\Support\ContactInfoFilter;
+
 /**
  * Authoritative, server-side contact-info stripping — the frontend already
  * strips the same pattern client-side, but that alone is trivially
@@ -22,12 +24,10 @@ namespace App\Domains\Core\Services;
  */
 class MessageRedactor
 {
-    private const PATTERN = '/(\+?\d[\d\s\-]{8,}\d)|(\b[\w.]+@[\w.]+\b)|(https?:\/\/\S+)|(\bwa\.me\S*)/i';
-
     /** @return array{body: string, redacted: bool} */
     public function redact(string $text): array
     {
-        $redactedBody = preg_replace(self::PATTERN, '[redacted]', $text, -1, $count);
+        $redactedBody = preg_replace(ContactInfoFilter::PATTERN, '[redacted]', $text, -1, $count);
 
         return [
             'body' => $redactedBody,

@@ -5,6 +5,7 @@ use App\Domains\Core\Http\Controllers\MessageThreadController;
 use App\Domains\Core\Http\Controllers\MoveRequestController;
 use App\Domains\Core\Http\Controllers\PlanController;
 use App\Domains\Core\Http\Controllers\PricingController;
+use App\Domains\Core\Http\Controllers\TeacherClassController;
 use App\Domains\Core\Http\Controllers\TrialRequestController;
 use Illuminate\Support\Facades\Route;
 
@@ -34,6 +35,12 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/move-requests/{moveRequest:public_id}/withdraw', [MoveRequestController::class, 'withdraw']);
 
     Route::post('/teachers/{teacherId}/trial-requests', [TrialRequestController::class, 'store']);
+    // Teacher-side aggregate across every plan they teach — mirrors
+    // /plans/:id/next-sessions and /history above (TeacherClassController's
+    // own docblock). Raw public_id, not {teacher:public_id} binding — Core
+    // resolves it through its own teacher_account_links read model.
+    Route::get('/teachers/{teacherPublicId}/next-sessions', [TeacherClassController::class, 'nextSessions']);
+    Route::get('/teachers/{teacherPublicId}/history', [TeacherClassController::class, 'history']);
     Route::get('/trial-requests/{trialRequest:public_id}', [TrialRequestController::class, 'show']);
     Route::delete('/trial-requests/{trialRequest:public_id}', [TrialRequestController::class, 'destroy']);
     Route::post('/trial-requests/{trialRequest:public_id}/respond', [TrialRequestController::class, 'respond']);
