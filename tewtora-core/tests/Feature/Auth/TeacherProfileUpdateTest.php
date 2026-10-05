@@ -30,6 +30,7 @@ class TeacherProfileUpdateTest extends TestCase
 
         $response = $this->withHeader('Authorization', "Bearer {$token}")
             ->patchJson("/api/v1/teachers/{$teacher->public_id}", [
+                'name' => 'Chinedu Okafor',
                 'subjects' => ['mathematics'],
                 'curricula' => ['british'],
                 'levels' => ['year_10_11'],
@@ -43,6 +44,7 @@ class TeacherProfileUpdateTest extends TestCase
             ]);
 
         $response->assertOk()
+            ->assertJsonPath('data.name', 'Chinedu Okafor')
             ->assertJsonPath('data.subjects', ['mathematics'])
             ->assertJsonPath('data.curricula', ['british'])
             ->assertJsonPath('data.levels', ['year_10_11'])
@@ -134,6 +136,20 @@ class TeacherProfileUpdateTest extends TestCase
 
         $response->assertStatus(422);
         $this->assertArrayHasKey('levels.0', $response->json('error.fields'));
+    }
+
+    public function test_a_name_containing_contact_info_is_rejected(): void
+    {
+        $teacher = $this->makeTeacher();
+        $token = $this->tokenFor($teacher->account);
+
+        $response = $this->withHeader('Authorization', "Bearer {$token}")
+            ->patchJson("/api/v1/teachers/{$teacher->public_id}", [
+                'name' => 'Call me on 08012345678',
+            ]);
+
+        $response->assertStatus(422);
+        $this->assertArrayHasKey('name', $response->json('error.fields'));
     }
 
     public function test_updating_a_profile_does_not_change_verification_status(): void

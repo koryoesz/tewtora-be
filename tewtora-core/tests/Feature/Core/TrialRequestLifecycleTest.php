@@ -29,7 +29,7 @@ class TrialRequestLifecycleTest extends TestCase
         $this->linkTeacherToCore($teacher);
 
         $create = $this->withHeader('Authorization', "Bearer {$this->tokenFor($parent)}")
-            ->postJson("/api/v1/teachers/{$teacher->id}/trial-requests", [
+            ->postJson("/api/v1/teachers/{$teacher->public_id}/trial-requests", [
                 'learner_profile_id' => $learner->id,
                 'slot_starts_at' => now()->addDay()->toIso8601String(),
                 'duration_minutes' => 30,

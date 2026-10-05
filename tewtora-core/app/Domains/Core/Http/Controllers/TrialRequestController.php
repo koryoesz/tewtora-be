@@ -5,6 +5,7 @@ namespace App\Domains\Core\Http\Controllers;
 use App\Domains\Core\Http\Requests\CreateTrialRequestRequest;
 use App\Domains\Core\Http\Requests\RespondTrialRequestRequest;
 use App\Domains\Core\Http\Resources\TrialRequestResource;
+use App\Domains\Core\Models\TeacherAccountLink;
 use App\Domains\Core\Models\TrialRequest;
 use App\Domains\Core\Repositories\TrialRequestRepositoryInterface;
 use App\Domains\Core\Services\TrialRequestService;
@@ -17,9 +18,17 @@ class TrialRequestController
         private readonly TrialRequestService $service,
     ) {}
 
-    /** docs/api-contract.md §3: POST /teachers/:id/trial-requests */
-    public function store(CreateTrialRequestRequest $request, int $teacherId): TrialRequestResource
+    /**
+     * docs/api-contract.md §3: POST /teachers/:id/trial-requests.
+     * {teacherPublicId} resolved through Core's own teacher_account_links
+     * read model — same cross-domain rule TeacherClassController follows:
+     * Core never reaches into Auth's Teacher model directly.
+     */
+    public function store(CreateTrialRequestRequest $request, string $teacherPublicId): TrialRequestResource
     {
+        $teacherId = TeacherAccountLink::where('public_id', $teacherPublicId)->value('teacher_id');
+        $teacherId ?: abort(404);
+
         // public_id is DB-generated (DEFAULT (UUID())) — create()'s
         // in-memory model doesn't know it without a refresh.
         $trialRequest = $this->trialRequests->create([

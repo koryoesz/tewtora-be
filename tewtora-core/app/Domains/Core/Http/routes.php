@@ -34,7 +34,12 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/move-requests/{moveRequest:public_id}/propose-alternate', [MoveRequestController::class, 'proposeAlternate']);
     Route::post('/move-requests/{moveRequest:public_id}/withdraw', [MoveRequestController::class, 'withdraw']);
 
-    Route::post('/teachers/{teacherId}/trial-requests', [TrialRequestController::class, 'store']);
+    // Public_id, not the numeric id docs/api-contract.md §3 originally used
+    // — the browse endpoint (GET /teachers, Auth domain) only ever hands
+    // out public_id, so requiring a numeric id here was the exact "no way
+    // to get one" gap docs/needed-endpoints-trial-requests.md flagged.
+    // Resolved via teacher_account_links, same as TeacherClassController.
+    Route::post('/teachers/{teacherPublicId}/trial-requests', [TrialRequestController::class, 'store']);
     // Teacher-side aggregate across every plan they teach — mirrors
     // /plans/:id/next-sessions and /history above (TeacherClassController's
     // own docblock). Raw public_id, not {teacher:public_id} binding — Core

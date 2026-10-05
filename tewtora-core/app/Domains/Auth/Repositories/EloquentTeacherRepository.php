@@ -27,6 +27,35 @@ class EloquentTeacherRepository implements TeacherRepositoryInterface
         return Teacher::where('verification_status', 'pending')->get();
     }
 
+    public function search(array $filters): Collection
+    {
+        $query = Teacher::where('verification_status', 'approved')
+            // suspend-new-matches (AdminSafeguardingController) is scoped to
+            // exactly this: existing lessons keep running, but a suspended
+            // teacher must not surface in a fresh browse/match list.
+            ->whereNull('new_matches_suspended_at')
+            ->with(['verificationChecks', 'subjects', 'curricula', 'availability']);
+
+        if (! empty($filters['subject'])) {
+            $query->whereHas('subjects', fn ($q) => $q->where('code', $filters['subject']));
+        }
+
+        if (! empty($filters['curriculum'])) {
+            $query->whereHas('curricula', fn ($q) => $q->where('code', $filters['curriculum']));
+        }
+
+        if (! empty($filters['level'])) {
+            $query->whereJsonContains('levels', $filters['level']);
+        }
+
+        if (! empty($filters['format'])) {
+            // A teacher offering "both" matches either specific format filter.
+            $query->where(fn ($q) => $q->where('preferred_format', $filters['format'])->orWhere('preferred_format', 'both'));
+        }
+
+        return $query->get();
+    }
+
     public function updateProfile(Teacher $teacher, array $data): Teacher
     {
         DB::transaction(function () use ($teacher, $data) {

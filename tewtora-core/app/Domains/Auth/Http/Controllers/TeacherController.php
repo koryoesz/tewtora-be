@@ -2,17 +2,25 @@
 
 namespace App\Domains\Auth\Http\Controllers;
 
+use App\Domains\Auth\Http\Requests\BrowseTeachersRequest;
 use App\Domains\Auth\Http\Requests\UpdateTeacherProfileRequest;
 use App\Domains\Auth\Http\Resources\TeacherResource;
 use App\Domains\Auth\Models\Teacher;
 use App\Domains\Auth\Repositories\TeacherRepositoryInterface;
 use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
 class TeacherController
 {
     public function __construct(
         private readonly TeacherRepositoryInterface $teachers,
     ) {}
+
+    /** GET /teachers — see BrowseTeachersRequest's docblock. */
+    public function index(BrowseTeachersRequest $request): AnonymousResourceCollection
+    {
+        return TeacherResource::collection($this->teachers->search($request->validated()));
+    }
 
     public function show(Request $request, Teacher $teacher): TeacherResource
     {
@@ -25,6 +33,9 @@ class TeacherController
     public function update(UpdateTeacherProfileRequest $request, Teacher $teacher): TeacherResource
     {
         $columns = [];
+        if ($request->has('name')) {
+            $columns['full_name'] = $request->validated('name');
+        }
         if ($request->has('years_teaching')) {
             $columns['years_experience'] = $request->validated('years_teaching');
         }

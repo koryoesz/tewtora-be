@@ -50,6 +50,10 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::put('/learners/{learner:public_id}/assessment', [AssessmentController::class, 'saveDraft']);
     Route::post('/learners/{learner:public_id}/assessment/submit', [AssessmentController::class, 'submit']);
 
+    // Unranked, filtered browse list of verified teachers —
+    // docs/needed-endpoints-browse-matching.md §1. Not the ranked /matches
+    // §2 asks for eventually; see BrowseTeachersRequest's docblock.
+    Route::get('/teachers', [TeacherController::class, 'index']);
     Route::get('/teachers/{teacher:public_id}', [TeacherController::class, 'show']);
     // A teacher editing their own subjects/curricula/levels/format/rate/
     // years/availability/bio — additive to the GET shape above, see

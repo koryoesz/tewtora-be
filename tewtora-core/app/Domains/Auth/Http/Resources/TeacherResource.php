@@ -12,6 +12,9 @@ class TeacherResource extends JsonResource
     {
         return [
             'id' => $this->public_id,
+            // Honestly null, not a fabricated placeholder, when a teacher
+            // hasn't set one yet — see 2024_02_01_000107's docblock.
+            'name' => $this->full_name,
             'years_teaching' => $this->years_experience,
             'about' => $this->bio,
             'format' => $this->preferred_format,

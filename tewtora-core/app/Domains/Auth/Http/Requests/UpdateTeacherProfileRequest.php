@@ -43,6 +43,14 @@ class UpdateTeacherProfileRequest extends FormRequest
     public function rules(): array
     {
         return [
+            // A browse list (docs/needed-endpoints-browse-matching.md §1) is
+            // unusable with every card anonymous — same contact-info reject
+            // as `about` below, since this is just as publicly displayed.
+            'name' => ['sometimes', 'nullable', 'string', 'min:2', 'max:160', function ($attribute, $value, $fail) {
+                if ($value !== null && ContactInfoFilter::containsContactInfo($value)) {
+                    $fail('The name must not contain phone numbers, emails, or links.');
+                }
+            }],
             'subjects' => ['sometimes', 'array'],
             'subjects.*' => [Rule::exists(Subject::class, 'code')],
             'curricula' => ['sometimes', 'array'],

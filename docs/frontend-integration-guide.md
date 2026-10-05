@@ -1,10 +1,10 @@
 # Tewtora Backend — Frontend Integration Guide
 
-**Status as of 2026-10-03.** This describes what's actually implemented and
+**Status as of 2026-10-05.** This describes what's actually implemented and
 callable right now — not the full product vision. It's derived from
 `docs/api-contract.md` (the original FE→BE contract) and
 `docs/api-gap-analysis.md`, but where those describe the target, this
-describes reality: 66 working endpoints across two services, and an
+describes reality: 67 working endpoints across two services, and an
 explicit list of what isn't built yet so you don't integrate against
 something that doesn't exist.
 
@@ -97,10 +97,17 @@ way in and it'll be echoed back, for tracing a specific user report).
 ## 3. ID convention
 
 Every resource is addressed by a UUID `public_id` in the URL — **never**
-the internal numeric id. Two known exceptions where a route currently
-takes a raw numeric id instead (flagged as inconsistent, not yet fixed):
-- `POST /teachers/{teacherId}/trial-requests` — `teacherId` is numeric.
-- Payment's `GET /teachers/{teacherId}/ledger` — same.
+the internal numeric id. One known exception where a route still takes a
+raw numeric id (flagged as inconsistent, not yet fixed):
+- Payment's `GET /teachers/{teacherId}/ledger`.
+
+`POST /teachers/{teacherId}/trial-requests` **no longer** takes a numeric
+id as of 2026-10-05 — it's `{teacherPublicId}` now, resolved through
+Core's own `teacher_account_links` read model. This was the exact gap
+`docs/needed-endpoints-trial-requests.md` named ("no way to get a numeric
+teacher id without teacher search/`/matches`, unimplemented") — now that
+`GET /teachers` (§7) exists and only ever hands out `public_id`, there was
+no reason to still require a numeric id here.
 
 Everywhere else, `{id}` in the paths below is the UUID.
 
@@ -308,10 +315,31 @@ matched teacher's actual rate is still `GET /teachers/{id}.price_per_session_min
 
 ## 7. Teachers
 
+### `GET /teachers` 🔒 — any authenticated account
+`docs/needed-endpoints-browse-matching.md` §1's "minimum useful version"
+of `/matches` — an unranked, filtered list of real **verified** teachers,
+replacing what used to be entirely fabricated client-side. Not the ranked
+`GET /learners/{id}/matches` §2 of that doc asks for eventually (no
+matching/scoring engine exists yet) — this is a plain filtered list.
+```
+GET /teachers?subject=mathematics&curriculum=british&level=year_10_11&format=group
+```
+Every filter is optional; an empty query returns every verified teacher.
+`subject`/`curriculum` validate against the same tables §4/§7's `GET
+/curricula`/`GET /subjects` read from. `level` is the same closed enum as
+`PATCH /teachers/{id}`'s `levels`. `format` is `one_on_one` or `group`
+only (not `both`) — a teacher whose own `format` is `both` matches either
+filter value. Response is `TeacherResource[]`, same shape as `GET
+/teachers/{id}` below. Excludes unverified teachers outright (not just
+deprioritized) and anyone with `new_matches_suspended_at` set (the
+existing safeguarding suspension — scoped to exactly this: new
+matches/browse results, not existing lessons).
+
 ### `GET /teachers/{id}` 🔒 — any authenticated account
 ```json
 {
   "id": "uuid",
+  "name": "Chinedu Okafor",
   "years_teaching": 5,
   "about": "bio text",
   "format": "both",
@@ -337,6 +365,7 @@ plus bio (`needed-endpoints-teacher-onboarding.md` §3). Every field is
 optional (`sometimes`) and additive to the `GET` shape above:
 ```json
 {
+  "name": "Chinedu Okafor",
   "subjects": ["mathematics"],
   "curricula": ["british"],
   "levels": ["year_10_11"],
@@ -353,6 +382,17 @@ lookup table (it's closed and rarely changes, unlike subjects/curricula).
 `availability` is the same `{day, starts_at, ends_at}` shape §5's
 assessment availability uses — writes into `auth.teacher_availability`,
 replacing whatever was there before (not merged).
+
+**`name` is new** (`needed-endpoints-browse-matching.md` §1 — "a browse
+list is unusable with every card anonymous"). There was genuinely nowhere
+to put a teacher's real name before this: `auth.accounts` has no name
+column at all (shared by every role — see §1's own `GET /auth/session`
+`name`, which is just `email`/`username`, not a real name), and
+`learner_profiles.full_name` is scoped to a learner. `name` lives on
+`auth.teachers` instead, self-reported like `about`. `null` for any
+teacher who hasn't set one yet — an honest gap, not backfilled with a
+placeholder. `2`–`160` chars, same contact-info reject as `about` below
+(it's just as publicly displayed).
 
 **`about` validation:** `422` if under 40 characters, or if it contains
 anything that looks like a phone number, email, or link — same
@@ -777,4 +817,4 @@ just unwritten code — don't estimate it as "almost done."
 **Questions or a mismatch between this doc and what you actually get back?**
 Treat the running code as ground truth over this file, and flag it —
 this was hand-written from the route list and resource classes, last
-updated 2026-10-03, and will drift the moment either side changes.
+updated 2026-10-05, and will drift the moment either side changes.

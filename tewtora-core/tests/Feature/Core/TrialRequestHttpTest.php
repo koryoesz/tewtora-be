@@ -23,10 +23,11 @@ class TrialRequestHttpTest extends TestCase
         $learner = $this->makeLearnerProfile(['owner_account_id' => $parent->id]);
         $this->linkLearnerToCore($learner);
         $teacher = $this->makeTeacher();
+        $this->linkTeacherToCore($teacher);
         $token = $this->tokenFor($parent);
 
         $create = $this->withHeader('Authorization', "Bearer {$token}")
-            ->postJson("/api/v1/teachers/{$teacher->id}/trial-requests", [
+            ->postJson("/api/v1/teachers/{$teacher->public_id}/trial-requests", [
                 'learner_profile_id' => $learner->id,
                 'slot_starts_at' => now()->addDay()->toIso8601String(),
                 'duration_minutes' => 30,
@@ -51,7 +52,7 @@ class TrialRequestHttpTest extends TestCase
         $this->linkTeacherToCore($teacher);
 
         $create = $this->withHeader('Authorization', "Bearer {$this->tokenFor($parent)}")
-            ->postJson("/api/v1/teachers/{$teacher->id}/trial-requests", [
+            ->postJson("/api/v1/teachers/{$teacher->public_id}/trial-requests", [
                 'learner_profile_id' => $learner->id,
                 'slot_starts_at' => now()->addDay()->toIso8601String(),
                 'duration_minutes' => 30,
@@ -82,7 +83,7 @@ class TrialRequestHttpTest extends TestCase
         $this->linkTeacherToCore($teacher);
 
         $create = $this->withHeader('Authorization', "Bearer {$this->tokenFor($parent)}")
-            ->postJson("/api/v1/teachers/{$teacher->id}/trial-requests", [
+            ->postJson("/api/v1/teachers/{$teacher->public_id}/trial-requests", [
                 'learner_profile_id' => $learner->id,
                 'slot_starts_at' => now()->addDay()->toIso8601String(),
                 'duration_minutes' => 30,
@@ -108,9 +109,10 @@ class TrialRequestHttpTest extends TestCase
         $learner = $this->makeLearnerProfile(['owner_account_id' => $parent->id]);
         $this->linkLearnerToCore($learner);
         $teacher = $this->makeTeacher();
+        $this->linkTeacherToCore($teacher);
 
         $create = $this->withHeader('Authorization', "Bearer {$this->tokenFor($parent)}")
-            ->postJson("/api/v1/teachers/{$teacher->id}/trial-requests", [
+            ->postJson("/api/v1/teachers/{$teacher->public_id}/trial-requests", [
                 'learner_profile_id' => $learner->id,
                 'slot_starts_at' => now()->addDay()->toIso8601String(),
                 'duration_minutes' => 30,
