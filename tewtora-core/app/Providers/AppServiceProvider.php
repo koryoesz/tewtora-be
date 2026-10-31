@@ -2,10 +2,12 @@
 
 namespace App\Providers;
 
+use App\Shared\Mail\MailTheme;
 use App\Shared\Mail\QueuedMailable;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Foundation\DevCommands;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 
@@ -26,6 +28,8 @@ class AppServiceProvider extends ServiceProvider
     {
         // Brand frame every domain's Mailables extend — backend-engineering-standards.md §5.
         $this->loadViewsFrom(app_path('Shared/Mail'), 'shared-mail');
+        // Every mail view (and partial) gets the brand palette as $theme.
+        View::composer(['shared-mail::*', '*-mail::*'], fn ($view) => $view->with('theme', MailTheme::colors()));
 
         // One password rule for sign-up and reset (RegisterRequest, ResetPasswordRequest).
         Password::defaults(fn () => Password::min(8));

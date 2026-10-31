@@ -2,6 +2,8 @@
 
 namespace Tests\Feature\Auth;
 
+use App\Domains\Auth\Mail\PasswordChanged;
+use App\Domains\Auth\Mail\PasswordResetLink;
 use App\Domains\Auth\Mail\WelcomeToTewtora;
 use App\Domains\Auth\Models\Account;
 use App\Shared\Mail\QueuedMailable;
@@ -30,6 +32,23 @@ class WelcomeEmailTest extends TestCase
         config(['app.frontend_url' => 'https://app.tewtora.test/']);
 
         $this->mailFor('parent')->assertSeeInHtml('href="https://app.tewtora.test/dashboard"', false);
+    }
+
+    public function test_links_default_to_the_production_app(): void
+    {
+        $this->mailFor('parent')->assertSeeInHtml('href="https://app.tewtora.com/dashboard"', false);
+    }
+
+    /** Emails follow the frontend's brand green (MailTheme), with no leftover off-brand colour. */
+    public function test_every_email_uses_the_frontend_brand_colour(): void
+    {
+        foreach ([
+            $this->mailFor('teacher', 'Amaka Obi'),
+            new PasswordResetLink($this->mailFor('parent')->account, 'token'),
+            new PasswordChanged($this->mailFor('parent')->account),
+        ] as $mail) {
+            $mail->assertSeeInHtml('#1BAA6E', false)->assertDontSeeInHtml('#5B6CFF', false);
+        }
     }
 
     public function test_a_teacher_is_greeted_by_first_name_with_teacher_next_steps(): void

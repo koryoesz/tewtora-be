@@ -54,8 +54,9 @@ return [
 
     'url' => env('APP_URL', 'http://localhost'),
 
-    // The Next.js app — links in emails point here, not at this API.
-    'frontend_url' => env('FRONTEND_URL', 'http://localhost:3000'),
+    // The Next.js app — links in emails point here, not at this API. Set
+    // FRONTEND_URL=http://localhost:3000 only to test against a local frontend.
+    'frontend_url' => env('FRONTEND_URL', 'https://app.tewtora.com'),
 
     /*
     |--------------------------------------------------------------------------

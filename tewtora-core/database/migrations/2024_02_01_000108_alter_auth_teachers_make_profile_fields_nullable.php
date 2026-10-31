@@ -39,9 +39,31 @@ return new class extends Migration
         SQL);
     }
 
-    /** Fails if any teacher has signed up but not finished onboarding — fill or remove those rows first. */
+    /**
+     * Can't run while any teacher has signed up but not finished onboarding:
+     * making the columns NOT NULL would need a value for them, and inventing
+     * one (0 experience, a 0 rate) is exactly what up() exists to avoid.
+     * Refuses with the affected ids instead of MySQL's opaque "Data
+     * truncated for column" error.
+     */
     public function down(): void
     {
+        $incomplete = DB::table('auth.teachers')
+            ->whereNull('years_experience')
+            ->orWhereNull('preferred_format')
+            ->orWhereNull('rate_minor')
+            ->pluck('id');
+
+        if ($incomplete->isNotEmpty()) {
+            throw new RuntimeException(sprintf(
+                'Cannot roll back 2024_02_01_000108: %d teacher(s) have not finished onboarding (auth.teachers.id: %s), '
+                .'so years_experience/preferred_format/rate_minor are still empty. Leave this migration applied, '
+                .'or have those teachers complete their profile first. Don\'t backfill made-up values.',
+                $incomplete->count(),
+                $incomplete->implode(', '),
+            ));
+        }
+
         DB::unprepared(<<<'SQL'
             ALTER TABLE auth.teachers
               MODIFY COLUMN years_experience SMALLINT UNSIGNED NOT NULL,
