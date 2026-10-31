@@ -5,12 +5,16 @@ namespace Tests\Feature\Auth;
 use App\Domains\Auth\Mail\WelcomeToTewtora;
 use App\Domains\Auth\Models\Account;
 use App\Domains\Auth\Models\OutboxEvent;
+use App\Domains\Auth\Models\Teacher;
 use App\Domains\Auth\Models\TeacherVerificationCheck;
+use App\Domains\Auth\Repositories\TeacherRepositoryInterface;
 use App\Shared\Mail\QueuedMailable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Mail\SendQueuedMailable;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
+use Laravel\Sanctum\PersonalAccessToken;
 use PHPUnit\Framework\Attributes\DataProvider;
 use RuntimeException;
 use Tests\Concerns\SeedsAuthGraph;
@@ -244,6 +248,111 @@ class RegistrationHttpTest extends TestCase
             ->assertJsonStructure(['token']);
 
         $this->assertTrue(Account::where('email', 'new-parent@example.test')->exists());
+    }
+
+    /** All-or-nothing: if the login token can't be created, the account must not survive behind the 500. */
+    public function test_no_account_is_left_behind_when_the_token_cannot_be_created(): void
+    {
+        Mail::fake();
+        PersonalAccessToken::creating(fn () => throw new RuntimeException('token table unavailable'));
+
+        $this->postJson('/api/v1/auth/register', $this->payload())
+            ->assertStatus(500)
+            ->assertJsonPath('error.code', 'internal_error');
+
+        $this->assertFalse(Account::where('email', 'new-parent@example.test')->exists());
+        Mail::assertNothingQueued();
+    }
+
+    public function test_no_account_is_left_behind_when_the_teacher_profile_cannot_be_created(): void
+    {
+        $this->mock(TeacherRepositoryInterface::class)
+            ->shouldReceive('createApplicant')
+            ->andThrow(new RuntimeException('teachers table unavailable'));
+
+        $this->postJson('/api/v1/auth/register', $this->payload([
+            'account_type' => 'teacher',
+            'email' => 'new-teacher@example.test',
+            'name' => 'Amaka Obi',
+        ]))->assertStatus(500);
+
+        $this->assertFalse(Account::where('email', 'new-teacher@example.test')->exists());
+    }
+
+    public function test_no_account_or_teacher_is_left_behind_when_the_outbox_event_cannot_be_written(): void
+    {
+        OutboxEvent::creating(fn () => throw new RuntimeException('outbox unavailable'));
+
+        $this->postJson('/api/v1/auth/register', $this->payload([
+            'account_type' => 'teacher',
+            'email' => 'new-teacher@example.test',
+            'name' => 'Amaka Obi',
+        ]))->assertStatus(500);
+
+        $this->assertFalse(Account::where('email', 'new-teacher@example.test')->exists());
+        $this->assertSame(0, Teacher::count());
+    }
+
+    /** Once the account and token are committed, a broken log can't turn the sign-up into an error. */
+    public function test_a_logging_failure_after_commit_does_not_fail_the_sign_up(): void
+    {
+        // The real production failure: the auth log can't be written (e.g.
+        // storage/logs owned by the wrong user), so Monolog throws on write.
+        config(['logging.channels.auth.path' => '/proc/tewtora-unwritable/auth.log']);
+        Log::forgetChannel('auth');
+
+        $this->postJson('/api/v1/auth/register', $this->payload())
+            ->assertCreated()
+            ->assertJsonStructure(['token']);
+
+        $this->assertTrue(Account::where('email', 'new-parent@example.test')->exists());
+    }
+
+    /** The formats people (and number inputs) actually send are cleaned to +digits and stored that way. */
+    #[DataProvider('acceptedPhones')]
+    public function test_common_phone_formats_are_accepted_and_normalised(string|int $sent, string $stored): void
+    {
+        $this->postJson('/api/v1/auth/register', $this->payload(['phone' => $sent]))->assertCreated();
+
+        $this->assertSame($stored, Account::where('email', 'new-parent@example.test')->value('phone'));
+    }
+
+    public static function acceptedPhones(): array
+    {
+        return [
+            'international' => ['+2348012345678', '+2348012345678'],
+            'local' => ['08012345678', '08012345678'],
+            'spaced' => ['+234 801 234 5678', '+2348012345678'],
+            'brackets and dashes' => ['+234 (0) 801-234-5678', '+23408012345678'],
+            'JSON number' => [2348012345678, '2348012345678'],
+        ];
+    }
+
+    public function test_phone_is_optional(): void
+    {
+        $this->postJson('/api/v1/auth/register', $this->payload(['phone' => '']))->assertCreated();
+
+        $this->assertNull(Account::where('email', 'new-parent@example.test')->value('phone'));
+    }
+
+    #[DataProvider('rejectedPhones')]
+    public function test_something_that_is_not_a_phone_number_is_rejected(string $sent): void
+    {
+        $this->postJson('/api/v1/auth/register', $this->payload(['phone' => $sent]))
+            ->assertStatus(422)
+            ->assertJsonPath('error.fields.phone.0', 'Enter a valid phone number, for example +2348012345678.');
+
+        $this->assertFalse(Account::where('email', 'new-parent@example.test')->exists());
+    }
+
+    public static function rejectedPhones(): array
+    {
+        return [
+            'letters' => ['call me'],
+            'too short' => ['12345'],
+            'too long' => ['+1234567890123456'],
+            'plus in the middle' => ['234+8012345678'],
+        ];
     }
 
     public function test_an_email_already_in_use_is_rejected(): void

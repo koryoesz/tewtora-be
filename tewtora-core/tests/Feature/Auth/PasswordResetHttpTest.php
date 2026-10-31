@@ -8,6 +8,7 @@ use App\Domains\Auth\Models\Account;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
+use RuntimeException;
 use Tests\Concerns\SeedsAuthGraph;
 use Tests\TestCase;
 
@@ -148,6 +149,25 @@ class PasswordResetHttpTest extends TestCase
         $this->reset(['token' => $token])->assertNoContent();
 
         Mail::assertQueued(PasswordChanged::class, fn (PasswordChanged $mail) => $mail->hasTo('ada@example.test'));
+    }
+
+    /** All-or-nothing: a failure while signing the account out must not leave a half-done reset. */
+    public function test_a_failure_mid_reset_changes_nothing(): void
+    {
+        $this->makeParent();
+        $token = $this->requestResetToken();
+
+        DB::listen(function ($query) {
+            if (str_starts_with(strtolower($query->sql), 'delete') && str_contains($query->sql, 'personal_access_tokens')) {
+                throw new RuntimeException('token revocation failed');
+            }
+        });
+
+        $this->reset(['token' => $token])->assertStatus(500);
+
+        $this->assertTrue(password_verify('old-password', Account::where('email', 'ada@example.test')->value('password_hash')));
+        $this->assertTrue(DB::table('auth.password_reset_tokens')->where('email', 'ada@example.test')->exists());
+        Mail::assertNotQueued(PasswordChanged::class);
     }
 
     public function test_a_token_can_only_be_used_once(): void

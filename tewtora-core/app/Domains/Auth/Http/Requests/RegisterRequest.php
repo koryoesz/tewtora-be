@@ -34,7 +34,9 @@ class RegisterRequest extends FormRequest
                 Rule::unique(Account::class, 'email')->withoutTrashed(),
             ],
             'password' => ['required', 'string', 'confirmed', Password::defaults()],
-            'phone' => ['sometimes', 'nullable', 'string', 'max:20'],
+            // E.164 shape after prepareForValidation() strips formatting:
+            // optional leading +, then 7-15 digits (fits VARCHAR(20)).
+            'phone' => ['sometimes', 'nullable', 'string', 'regex:/^\+?[0-9]{7,15}$/'],
             // Stored on auth.teachers.full_name — accounts has no name column
             // for any role, so for a non-teacher it's excluded from
             // validated() rather than accepted and silently dropped later.
@@ -46,5 +48,28 @@ class RegisterRequest extends FormRequest
                 }
             }],
         ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'phone.regex' => 'Enter a valid phone number, for example +2348012345678.',
+        ];
+    }
+
+    /**
+     * Accepts a phone sent as a JSON number as well as a string (number
+     * inputs on the frontend often serialise that way), and strips the
+     * formatting people type: spaces, dashes, dots, brackets. What gets
+     * validated, and stored, is just the optional + and the digits.
+     */
+    protected function prepareForValidation(): void
+    {
+        $phone = $this->input('phone');
+
+        if (is_int($phone) || is_string($phone)) {
+            $clean = preg_replace('/[\s().\-]/', '', (string) $phone);
+            $this->merge(['phone' => $clean === '' ? null : $clean]);
+        }
     }
 }
