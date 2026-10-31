@@ -20,6 +20,9 @@ return [
 
     'resend' => [
         'key' => env('RESEND_API_KEY'),
+        // Resend's per-team API limit (2/s by default) — raise it only if
+        // Resend has raised the account's limit.
+        'rate_limit_per_second' => (int) env('RESEND_RATE_LIMIT_PER_SECOND', 2),
     ],
 
     'ses' => [

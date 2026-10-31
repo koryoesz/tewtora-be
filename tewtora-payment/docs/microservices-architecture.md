@@ -30,7 +30,7 @@ The backend splits into four services, not three. Auth & Onboarding, Recommendat
 
 | Service | Owns | Database |
 |---|---|---|
-| **Auth & Onboarding** | `accounts`, `learner_profiles`, `assessments`, `assessment_subjects`, `teachers`, `teacher_subjects`, `teacher_curricula`, `teacher_availability`, `teacher_verification_checks`, `teacher_time_off`, `safeguarding_incidents`, `audit_log`, `subjects`, `curricula` | MySQL |
+| **Auth & Onboarding** | `accounts`, `learner_profiles`, `assessments`, `assessment_subjects`, `teachers`, `teacher_subjects`, `teacher_curricula`, `teacher_availability`, `teacher_verification_checks`, `teacher_time_off`, `safeguarding_incidents`, `audit_log`, `subjects`, `curricula`, `password_reset_tokens` | MySQL |
 | **Recommendation** | `matches`, `recruitment_targets`, plus local read models: `learner_profile_view`, `teacher_profile_view` (synced via events, never queried live from Auth) | MySQL (+ OpenSearch/a vector store if matching becomes similarity-based — MySQL has no pgvector equivalent) |
 | **Main / Core** | `plans`, `plan_goals`, `sessions`, `trial_requests`, `move_requests`, `move_approvals`, `feedback`, `progress_reports`, `ratings` | MySQL |
 | **Payment** | `payments`, `payouts`, `payment_methods`, `payment_providers`, `payment_quotes`, `payment_line_items`, `commission_tiers`, `payment_audit_log` | MySQL — isolated instance/cluster, minimal IAM surface, append-only ledger discipline |
@@ -134,6 +134,7 @@ CREATE TABLE outbox_events (
 |---|---|---|---|---|
 | `AssessmentSubmitted` | Auth | Recommendation | learner_profile_id, assessment_id | ≥ once |
 | `LearnerProfileUpdated` | Auth | Recommendation | profile_id, grade, subjects, curriculum_id, budget_tier | ≥ once |
+| `TeacherRegistered` | Auth | Main, Recommendation | teacher_id, public_id, account_id, verification_status | ≥ once |
 | `TeacherVerified` | Auth | Recommendation | teacher_id, verification_status, subjects, curricula | ≥ once |
 | `MatchAccepted` | Recommendation | Main | match_id, learner_profile_id, teacher_id | sync call |
 | `PaymentSucceeded` | Payment | Main | payment_id, session_id, provider_reference, amount_minor | ≥ once |
@@ -144,6 +145,8 @@ CREATE TABLE outbox_events (
 "≥ once" (at-least-once) delivery is assumed throughout — every consumer must be written to safely process the same event twice.
 
 `SessionFeedbackFiled` (v2.2) is deliberately separate from `SessionCompleted`: the product's payment rule releases a session's held fee only once its feedback is *filed*, not merely once the session has happened (`docs/api-contract.md` §11) — a teacher who skips feedback keeps that session's fee held indefinitely, which is the intended pressure, not a bug to route around by releasing on `SessionCompleted` alone. Payment's listener must only transition a `payment_line_items` row `held → released`, never re-apply to an already-`released` row — the same idempotency discipline as the webhook handler (§7.3).
+
+`TeacherRegistered` is written by `POST /auth/register` (account_type `teacher`) in the same transaction as the new account and `teachers` row. It's what Main's `teacher_account_links` and Recommendation's `teacher_profile_view` rows are meant to be created from, keyed on `teacher_id`, so a redelivery upserts the same row rather than inserting a second. **No consumer exists yet** — until one does, a self-signed-up teacher has neither row (the seeder writes them directly for its fixture teacher).
 
 `AssessmentSubmitted` (v2.2) exists because "kick off matching and report a match count" (`docs/api-contract.md` §2) can't be computed synchronously inside Auth's submit endpoint — that would mean Auth's controller querying Recommendation's `matches` table directly, exactly the cross-domain read `LearnerProfileView`/`TeacherAccountLink`-style read models exist to avoid everywhere else. The submit endpoint returns immediately once this event is written to the outbox; the frontend gets a real match count from a follow-up `GET /matches?assessmentId=` against Recommendation's own endpoint once it's consumed the event and run matching — not built this pass.
 

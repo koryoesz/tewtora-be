@@ -76,4 +76,24 @@ class AdminVerificationHttpTest extends TestCase
 
         $response->assertOk()->assertJsonPath('data.status', 'approved');
     }
+
+    /** A self-signed-up teacher has only a name until onboarding fills in the rest (2024_02_01_000108). */
+    public function test_approving_a_teacher_with_an_unfinished_profile_is_rejected(): void
+    {
+        $admin = $this->makeAccount(['account_type' => 'admin']);
+        $teacher = $this->makeTeacher(['years_experience' => null, 'preferred_format' => null, 'rate_minor' => null]);
+        foreach (TeacherVerificationCheck::KINDS as $kind) {
+            TeacherVerificationCheck::create(['teacher_id' => $teacher->id, 'kind' => $kind, 'state' => 'approved']);
+        }
+        $token = $this->tokenFor($admin);
+
+        $response = $this->withHeader('Authorization', "Bearer {$token}")
+            ->postJson("/api/v1/internal/verification-applications/{$teacher->public_id}/decide", [
+                'decision' => 'approved',
+                'note' => 'All checks confirmed.',
+            ]);
+
+        $response->assertStatus(409)->assertJsonPath('error.code', 'teacher_profile_incomplete');
+        $this->assertSame('pending', $teacher->fresh()->verification_status);
+    }
 }

@@ -19,8 +19,65 @@ Two separate backend services, two separate base URLs:
 
 ## 1. Auth
 
-There's no registration endpoint yet — accounts have to exist already
-(seeded/created directly for now). Everything else works:
+### `POST /auth/register`
+Self-service sign-up for **parents, independent students and teachers**.
+A child's login is created by its parent (§4); admins can't self-register.
+Throttled to 10 requests/minute per IP.
+```json
+// request — account_type: parent | independent_student | teacher; phone optional
+{ "account_type": "parent", "email": "parent@example.test",
+  "password": "secret123", "password_confirmation": "secret123" }
+// request — a teacher: same fields plus a required `name` (2-160 chars, no
+// phone numbers/emails/links). `name` is ignored for any other account_type.
+{ "account_type": "teacher", "name": "Amaka Obi", "email": "amaka@example.test",
+  "password": "secret123", "password_confirmation": "secret123" }
+// response 201 — same shape as login, already signed in
+{ "token": "1|abcdef123456..." }
+// response 422 — email taken, password under 8 chars / unconfirmed, a
+// teacher with no/invalid name, or account_type child/admin
+{ "error": { "code": "validation_failed", "message": "...", "fields": { "email": ["..."] }, "request_id": "req_..." } }
+// response 409 — only if two sign-ups for one email race each other
+{ "error": { "code": "email_already_registered", "message": "An account with this email already exists.", "request_id": "req_..." } }
+```
+A welcome email (`WelcomeToTewtora`, sent via Resend, queued) goes out on
+every successful sign-up, with a button to `FRONTEND_URL/dashboard`.
+No email-verification step exists yet (`email_verified_at` stays null),
+and an independent student's own learner profile isn't created by this
+call.
+
+**A new teacher** starts as a pending applicant with only a name: subjects,
+curricula, levels, format, rate, experience, availability and bio are all
+`null`/empty until the onboarding wizard sends them via
+`PATCH /teachers/{teacher_id}` (get `teacher_id` from `GET /auth/session`).
+They don't appear in `GET /teachers` until approved, and an admin can't
+approve them until format, rate and experience are filled in
+(`409 teacher_profile_incomplete`).
+
+### `POST /auth/forgot-password`
+```json
+// request
+{ "email": "ada@example.com" }
+// response 202 — always, whether or not the email has an account
+{ "message": "If an account exists for that email, we've sent a link to reset the password." }
+```
+Emails a link to `FRONTEND_URL/reset-password?token=…&email=…`, valid for 60
+minutes and usable once. At most one link per email per minute (repeats
+still get the same 202), and 5 requests/minute per IP (then `429
+too_many_requests`). Child logins have no email; a parent resets a child's
+PIN instead (§4).
+
+### `POST /auth/reset-password`
+```json
+// request — token and email come from the link's query string
+{ "email": "ada@example.com", "token": "…", "password": "new-secret",
+  "password_confirmation": "new-secret" }
+// response 204 — no body. The account is signed out on every device
+// (all tokens revoked), so send the user to log in.
+// response 422 — wrong, used or expired token, or unknown email (all the same):
+{ "error": { "code": "invalid_reset_token", "message": "This reset link is invalid or has expired. Please request a new one.", "request_id": "req_..." } }
+// response 422 — password rules (same as sign-up): error.code "validation_failed", error.fields.password
+```
+A "your password was changed" email follows every successful reset.
 
 ### `POST /auth/login`
 Two credential shapes, same endpoint — exactly one pair, never a mix:
@@ -800,7 +857,6 @@ just unwritten code — don't estimate it as "almost done."
 
 ## 16. Not implemented anywhere (don't build UI expecting these yet)
 
-- Account registration
 - `/matches` (ranked teacher results from an assessment)
 - Live session (join/leave/chat/whiteboard)
 - Teacher roster, teacher stats, teacher schedule diary, teacher

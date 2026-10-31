@@ -3,6 +3,7 @@
 namespace App\Domains\Auth\Http\Controllers;
 
 use App\Domains\Auth\Http\Requests\LoginRequest;
+use App\Domains\Auth\Http\Requests\RegisterRequest;
 use App\Domains\Auth\Http\Requests\SwitchProfileRequest;
 use App\Domains\Auth\Repositories\LearnerProfileRepositoryInterface;
 use App\Domains\Auth\Services\AuthSessionService;
@@ -28,6 +29,13 @@ class AuthController
         $token = $this->service->login($request->validated());
 
         return response()->json(['token' => $token->plainTextToken]);
+    }
+
+    public function register(RegisterRequest $request)
+    {
+        $token = $this->service->register($request->validated());
+
+        return response()->json(['token' => $token->plainTextToken], 201);
     }
 
     public function logout(Request $request)

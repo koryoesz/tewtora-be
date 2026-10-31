@@ -3,12 +3,21 @@
 namespace App\Domains\Auth\Services;
 
 use App\Domains\Auth\Exceptions\ChildSignInPausedException;
+use App\Domains\Auth\Exceptions\EmailAlreadyRegisteredException;
 use App\Domains\Auth\Exceptions\InvalidCredentialsException;
+use App\Domains\Auth\Mail\WelcomeToTewtora;
 use App\Domains\Auth\Models\Account;
 use App\Domains\Auth\Models\LearnerProfile;
+use App\Domains\Auth\Models\OutboxEvent;
 use App\Domains\Auth\Repositories\AccountRepositoryInterface;
+use App\Domains\Auth\Repositories\TeacherRepositoryInterface;
+use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Laravel\Sanctum\NewAccessToken;
+use Throwable;
 
 /**
  * backend-engineering-standards.md §4: token abilities assigned per role
@@ -26,6 +35,7 @@ class AuthSessionService
 
     public function __construct(
         private readonly AccountRepositoryInterface $accounts,
+        private readonly TeacherRepositoryInterface $teachers,
     ) {}
 
     /**
@@ -39,6 +49,76 @@ class AuthSessionService
         }
 
         return $this->loginWithPassword($credentials['email'], $credentials['password']);
+    }
+
+    /**
+     * Creates the account and signs it straight in, so a sign-up returns
+     * the same token shape as login(). email_verified_at stays null — no
+     * verification-mail flow exists yet.
+     *
+     * A teacher also gets a pending auth.teachers row (see
+     * TeacherRepositoryInterface::createApplicant) and a TeacherRegistered
+     * outbox event in the same transaction — Core's teacher_account_links
+     * and Recommendation's teacher_profile_view are built from that event,
+     * never written from here.
+     *
+     * @param  array{account_type: string, email: string, password: string, phone?: ?string, name?: string}  $data
+     */
+    public function register(array $data): NewAccessToken
+    {
+        try {
+            $account = DB::transaction(function () use ($data) {
+                // public_id is DB-generated (DEFAULT (UUID())) — create()'s
+                // in-memory model doesn't know it without a refresh.
+                $account = $this->accounts->create([
+                    'email' => $data['email'],
+                    'phone' => $data['phone'] ?? null,
+                    'password_hash' => Hash::make($data['password']),
+                    'account_type' => $data['account_type'],
+                ])->refresh();
+
+                if ($account->account_type === 'teacher') {
+                    $teacher = $this->teachers->createApplicant($account, $data['name']);
+
+                    OutboxEvent::create([
+                        'aggregate_type' => 'teacher',
+                        'aggregate_id' => $teacher->id,
+                        'event_type' => 'TeacherRegistered',
+                        'payload' => [
+                            'teacher_id' => $teacher->id,
+                            'public_id' => $teacher->public_id,
+                            'account_id' => $account->id,
+                            'verification_status' => $teacher->verification_status,
+                        ],
+                    ]);
+                }
+
+                return $account;
+            });
+        } catch (UniqueConstraintViolationException) {
+            throw new EmailAlreadyRegisteredException;
+        }
+
+        Log::channel('auth')->info('account registered', [
+            'account_id' => $account->public_id,
+            'account_type' => $account->account_type,
+        ]);
+
+        // Only pushes onto the `mail` queue (QueuedMailable); the actual send,
+        // its retries and Resend rate limiting happen in the worker. The
+        // account already exists by now, so a failed push (queue store down,
+        // or a Resend error under QUEUE_CONNECTION=sync) must not turn the
+        // sign-up into an error response.
+        try {
+            Mail::to($account->email)->queue(new WelcomeToTewtora($account, $data['name'] ?? null));
+        } catch (Throwable $e) {
+            Log::channel('auth')->error('welcome email could not be queued', [
+                'account_id' => $account->public_id,
+                'exception' => $e,
+            ]);
+        }
+
+        return $account->createToken('web', self::ABILITIES[$account->account_type] ?? []);
     }
 
     private function loginWithPassword(string $email, string $password): NewAccessToken

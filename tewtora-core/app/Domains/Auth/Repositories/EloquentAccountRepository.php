@@ -25,4 +25,11 @@ class EloquentAccountRepository implements AccountRepositoryInterface
     {
         return Account::create($data);
     }
+
+    public function updatePasswordHash(Account $account, string $passwordHash): Account
+    {
+        $account->update(['password_hash' => $passwordHash]);
+
+        return $account;
+    }
 }

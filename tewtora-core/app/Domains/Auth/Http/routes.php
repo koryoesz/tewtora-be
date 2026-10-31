@@ -8,17 +8,24 @@ use App\Domains\Auth\Http\Controllers\AssessmentController;
 use App\Domains\Auth\Http\Controllers\AuthController;
 use App\Domains\Auth\Http\Controllers\CurriculumController;
 use App\Domains\Auth\Http\Controllers\LearnerProfileController;
+use App\Domains\Auth\Http\Controllers\PasswordResetController;
 use App\Domains\Auth\Http\Controllers\SubjectController;
 use App\Domains\Auth\Http\Controllers\TeacherController;
 use Illuminate\Support\Facades\Route;
 
 /*
-| Auth & Onboarding routes. Still outstanding: account registration (not in
-| docs/api-contract.md §0's own endpoint list), §15/§16's matching-ops and
+| Auth & Onboarding routes. Still outstanding: §15/§16's matching-ops and
 | stuck-money admin screens, teacher roster/diary (§12/§13).
 */
 
 Route::post('/auth/login', [AuthController::class, 'login']);
+// Parent / independent student / teacher — see RegisterRequest's docblock.
+// Throttled since it's unauthenticated and creates rows.
+Route::post('/auth/register', [AuthController::class, 'register'])->middleware('throttle:10,1');
+// Per-IP throttles on top of the broker's own one-link-per-email-per-minute
+// (config/auth.php `passwords.users.throttle`).
+Route::post('/auth/forgot-password', [PasswordResetController::class, 'forgot'])->middleware('throttle:5,1');
+Route::post('/auth/reset-password', [PasswordResetController::class, 'reset'])->middleware('throttle:10,1');
 
 Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/auth/logout', [AuthController::class, 'logout']);

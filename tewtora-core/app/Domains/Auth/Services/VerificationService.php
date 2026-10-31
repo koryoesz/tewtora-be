@@ -2,6 +2,7 @@
 
 namespace App\Domains\Auth\Services;
 
+use App\Domains\Auth\Exceptions\TeacherProfileIncompleteException;
 use App\Domains\Auth\Exceptions\VerificationChecksIncompleteException;
 use App\Domains\Auth\Models\Teacher;
 use App\Shared\Logging\Auditable;
@@ -49,6 +50,15 @@ class VerificationService
 
                 if (! $allConfirmed) {
                     throw new VerificationChecksIncompleteException($teacher->id);
+                }
+
+                $missing = array_keys(array_filter(
+                    $teacher->only(['years_experience', 'preferred_format', 'rate_minor']),
+                    fn ($value) => $value === null,
+                ));
+
+                if ($missing !== []) {
+                    throw new TeacherProfileIncompleteException($teacher->id, $missing);
                 }
             }
 
