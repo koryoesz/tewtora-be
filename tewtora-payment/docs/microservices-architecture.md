@@ -30,7 +30,7 @@ The backend splits into four services, not three. Auth & Onboarding, Recommendat
 
 | Service | Owns | Database |
 |---|---|---|
-| **Auth & Onboarding** | `accounts`, `learner_profiles`, `assessments`, `assessment_subjects`, `teachers`, `teacher_subjects`, `teacher_curricula`, `teacher_availability`, `teacher_verification_checks`, `teacher_time_off`, `safeguarding_incidents`, `audit_log`, `subjects`, `curricula` | MySQL |
+| **Auth & Onboarding** | `accounts`, `learner_profiles`, `assessments`, `assessment_subjects`, `teachers`, `teacher_subjects`, `teacher_curricula`, `teacher_availability`, `teacher_verification_checks`, `teacher_time_off`, `safeguarding_incidents`, `audit_log`, `subjects`, `curricula`, `password_reset_tokens` | MySQL |
 | **Recommendation** | `matches`, `recruitment_targets`, plus local read models: `learner_profile_view`, `teacher_profile_view` (synced via events, never queried live from Auth) | MySQL (+ OpenSearch/a vector store if matching becomes similarity-based — MySQL has no pgvector equivalent) |
 | **Main / Core** | `plans`, `plan_goals`, `sessions`, `trial_requests`, `move_requests`, `move_approvals`, `feedback`, `progress_reports`, `ratings` | MySQL |
 | **Payment** | `payments`, `payouts`, `payment_methods`, `payment_providers`, `payment_quotes`, `payment_line_items`, `commission_tiers`, `payment_audit_log` | MySQL — isolated instance/cluster, minimal IAM surface, append-only ledger discipline |

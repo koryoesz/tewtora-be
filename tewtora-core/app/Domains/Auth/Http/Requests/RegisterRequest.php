@@ -33,7 +33,7 @@ class RegisterRequest extends FormRequest
                 // soft-deleted account doesn't block re-registration.
                 Rule::unique(Account::class, 'email')->withoutTrashed(),
             ],
-            'password' => ['required', 'string', 'confirmed', Password::min(8)],
+            'password' => ['required', 'string', 'confirmed', Password::defaults()],
             'phone' => ['sometimes', 'nullable', 'string', 'max:20'],
             // Stored on auth.teachers.full_name — accounts has no name column
             // for any role, so for a non-teacher it's excluded from

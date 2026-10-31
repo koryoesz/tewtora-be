@@ -95,7 +95,8 @@ return [
     'passwords' => [
         'users' => [
             'provider' => 'users',
-            'table' => env('AUTH_PASSWORD_RESET_TOKEN_TABLE', 'password_reset_tokens'),
+            // Auth domain's own schema — see 2024_02_01_000109's docblock.
+            'table' => env('AUTH_PASSWORD_RESET_TOKEN_TABLE', 'auth.password_reset_tokens'),
             'expire' => 60,
             'throttle' => 60,
         ],

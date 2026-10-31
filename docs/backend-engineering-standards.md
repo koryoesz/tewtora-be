@@ -86,6 +86,7 @@ Domain exceptions, one per business rule that can realistically fail — pulled 
 | `UnauthorizedPayerException` | Payment | Payment attempted by an account that isn't the profile's owner |
 | `EmailAlreadyRegisteredException` | Auth | Two sign-ups for the same email race past validation and hit the unique index |
 | `TeacherProfileIncompleteException` | Auth | A teacher is approved while `years_experience`, `preferred_format` or `rate_minor` is still null |
+| `InvalidPasswordResetTokenException` | Auth | `POST /auth/reset-password` with a wrong, used or expired token, or an unknown email (deliberately indistinguishable) |
 
 A single `Shared/Exceptions/Handler.php` (extending Laravel's) catches `AppException` and renders the standard error envelope (section 6) — domain code just throws, it never formats HTTP responses itself.
 
@@ -140,6 +141,8 @@ Use Laravel **Mailables** with Markdown mail templates (`Illuminate\Mail\Mailabl
 | Mailable | Triggered by | Recipient |
 |---|---|---|
 | `WelcomeToTewtora` | `POST /auth/register` succeeds (copy varies by account type) | Parent / independent student / teacher |
+| `PasswordResetLink` | `POST /auth/forgot-password` (job payload encrypted, since it carries the token) | Account owner |
+| `PasswordChanged` | `POST /auth/reset-password` succeeds | Account owner |
 | `TeacherVerificationDecision` | `verification_status` changes | Teacher |
 | `MatchRecommended` | New `matches` row created | Parent / independent student |
 | `TrialConfirmed` | Trial session booked | Parent/student + teacher |

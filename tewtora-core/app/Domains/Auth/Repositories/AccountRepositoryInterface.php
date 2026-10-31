@@ -13,4 +13,6 @@ interface AccountRepositoryInterface
     public function findByPublicId(string $publicId): ?Account;
 
     public function create(array $data): Account;
+
+    public function updatePasswordHash(Account $account, string $passwordHash): Account;
 }

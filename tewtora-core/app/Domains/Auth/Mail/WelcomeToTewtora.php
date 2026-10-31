@@ -19,6 +19,8 @@ use Illuminate\Mail\Mailables\Envelope;
  */
 class WelcomeToTewtora extends QueuedMailable
 {
+    use GreetsAccount;
+
     protected string $logChannel = 'auth';
 
     /** @param  ?string  $name  Only a teacher gives one at sign-up — accounts have no name column. */
@@ -41,8 +43,8 @@ class WelcomeToTewtora extends QueuedMailable
             text: 'auth-mail::welcome-text',
             with: [
                 'copy' => $this->copy(),
-                'greeting' => $this->firstName() ? "Hi {$this->firstName()}," : 'Hi there,',
-                'initial' => mb_strtoupper(mb_substr($this->firstName() ?? $this->account->email, 0, 1)),
+                'greeting' => $this->greetingFor($this->account, $this->name),
+                'initial' => mb_strtoupper(mb_substr($this->firstNameOf($this->account, $this->name) ?? $this->account->email, 0, 1)),
                 'email' => $this->account->email,
                 'dashboardUrl' => rtrim(config('app.frontend_url'), '/').'/dashboard',
             ],
@@ -52,13 +54,6 @@ class WelcomeToTewtora extends QueuedMailable
     protected function failureContext(): array
     {
         return ['account_id' => $this->account->public_id, 'account_type' => $this->account->account_type];
-    }
-
-    private function firstName(): ?string
-    {
-        $first = $this->name !== null ? strtok(trim($this->name), ' ') : false;
-
-        return $first === false ? null : $first;
     }
 
     /** @return array<string, mixed> */

@@ -53,6 +53,32 @@ They don't appear in `GET /teachers` until approved, and an admin can't
 approve them until format, rate and experience are filled in
 (`409 teacher_profile_incomplete`).
 
+### `POST /auth/forgot-password`
+```json
+// request
+{ "email": "ada@example.com" }
+// response 202 — always, whether or not the email has an account
+{ "message": "If an account exists for that email, we've sent a link to reset the password." }
+```
+Emails a link to `FRONTEND_URL/reset-password?token=…&email=…`, valid for 60
+minutes and usable once. At most one link per email per minute (repeats
+still get the same 202), and 5 requests/minute per IP (then `429
+too_many_requests`). Child logins have no email; a parent resets a child's
+PIN instead (§4).
+
+### `POST /auth/reset-password`
+```json
+// request — token and email come from the link's query string
+{ "email": "ada@example.com", "token": "…", "password": "new-secret",
+  "password_confirmation": "new-secret" }
+// response 204 — no body. The account is signed out on every device
+// (all tokens revoked), so send the user to log in.
+// response 422 — wrong, used or expired token, or unknown email (all the same):
+{ "error": { "code": "invalid_reset_token", "message": "This reset link is invalid or has expired. Please request a new one.", "request_id": "req_..." } }
+// response 422 — password rules (same as sign-up): error.code "validation_failed", error.fields.password
+```
+A "your password was changed" email follows every successful reset.
+
 ### `POST /auth/login`
 Two credential shapes, same endpoint — exactly one pair, never a mix:
 ```json
