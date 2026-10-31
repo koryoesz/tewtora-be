@@ -8,13 +8,13 @@
     <tr>
         <td align="center">
             <!--[if mso]>
-            <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="{{ $url }}" style="height:56px;v-text-anchor:middle;width:504px;" arcsize="22%" stroke="f" fillcolor="#5B6CFF">
+            <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="{{ $url }}" style="height:56px;v-text-anchor:middle;width:504px;" arcsize="22%" stroke="f" fillcolor="{{ $theme['brand'] }}">
                 <w:anchorlock/>
-                <center style="color:#FFFFFF;font-family:Arial,sans-serif;font-size:16px;font-weight:bold;">{{ $label }}</center>
+                <center style="color:{{ $theme['white'] }};font-family:Arial,sans-serif;font-size:16px;font-weight:bold;">{{ $label }}</center>
             </v:roundrect>
             <![endif]-->
             <!--[if !mso]><!-->
-            <a href="{{ $url }}" target="_blank" style="display:block; background-color:#5B6CFF; border-radius:12px; padding:17px 24px; font-family:{!! $font !!}; font-size:16px; line-height:22px; font-weight:600; color:#FFFFFF; text-align:center; text-decoration:none; box-shadow:0 8px 20px rgba(91, 108, 255, 0.28);">
+            <a href="{{ $url }}" target="_blank" style="display:block; background-color:{{ $theme['brand'] }}; border-radius:12px; padding:17px 24px; font-family:{!! $font !!}; font-size:16px; line-height:22px; font-weight:600; color:{{ $theme['white'] }}; text-align:center; text-decoration:none; box-shadow:0 8px 20px {{ $theme['buttonGlow'] }};">
                 {{ $label }} &rarr;
             </a>
             <!--<![endif]-->
@@ -22,7 +22,7 @@
     </tr>
 </table>
 
-<p style="margin:16px 0 0; font-family:{!! $font !!}; font-size:12px; line-height:19px; color:#8A8FA3; text-align:center;">
+<p style="margin:16px 0 0; font-family:{!! $font !!}; font-size:12px; line-height:19px; color:{{ $theme['muted'] }}; text-align:center;">
     Button not working? Paste this into your browser:<br>
-    <a href="{{ $url }}" target="_blank" style="color:#5B6CFF; text-decoration:none; word-break:break-all;">{{ $url }}</a>
+    <a href="{{ $url }}" target="_blank" style="color:{{ $theme['brandInk'] }}; text-decoration:none; word-break:break-all;">{{ $url }}</a>
 </p>
