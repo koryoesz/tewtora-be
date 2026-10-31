@@ -6,6 +6,9 @@ use Illuminate\Database\Eloquent\Model;
 
 class TeacherVerificationCheck extends Model
 {
+    /** Mirrors the table's CHECK on `kind`. */
+    public const KINDS = ['government_id', 'credentials', 'teaching_demo'];
+
     protected $table = 'auth.teacher_verification_checks';
 
     protected $fillable = [

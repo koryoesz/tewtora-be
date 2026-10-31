@@ -84,6 +84,8 @@ Domain exceptions, one per business rule that can realistically fail — pulled 
 | `PaymentProviderException` | Payment | Adapter call to Paystack/Flutterwave/Stripe fails |
 | `DuplicateWebhookException` | Payment | `(provider_id, provider_reference)` already processed |
 | `UnauthorizedPayerException` | Payment | Payment attempted by an account that isn't the profile's owner |
+| `EmailAlreadyRegisteredException` | Auth | Two sign-ups for the same email race past validation and hit the unique index |
+| `TeacherProfileIncompleteException` | Auth | A teacher is approved while `years_experience`, `preferred_format` or `rate_minor` is still null |
 
 A single `Shared/Exceptions/Handler.php` (extending Laravel's) catches `AppException` and renders the standard error envelope (section 6) — domain code just throws, it never formats HTTP responses itself.
 
@@ -137,6 +139,7 @@ Use Laravel **Mailables** with Markdown mail templates (`Illuminate\Mail\Mailabl
 
 | Mailable | Triggered by | Recipient |
 |---|---|---|
+| `WelcomeToTewtora` | `POST /auth/register` succeeds (copy varies by account type) | Parent / independent student / teacher |
 | `TeacherVerificationDecision` | `verification_status` changes | Teacher |
 | `MatchRecommended` | New `matches` row created | Parent / independent student |
 | `TrialConfirmed` | Trial session booked | Parent/student + teacher |
@@ -147,6 +150,11 @@ Use Laravel **Mailables** with Markdown mail templates (`Illuminate\Mail\Mailabl
 | `PayoutProcessed` | `payouts.status = 'paid'` | Teacher |
 
 Each Mailable's Blade template lives under its owning domain (`app/Domains/Payment/Mail/PaymentReceipt.php` + matching Markdown view), not a shared global `resources/views/emails` dump — keeps the domain boundary intact for email too. A shared base layout (`Shared/Mail/layout.blade.php`) provides brand-consistent header/footer (logo, colors) so individual templates don't each reimplement it.
+
+Every Mailable extends `App\Shared\Mail\QueuedMailable`, which fixes the delivery behaviour so each email only defines its content:
+- dispatched onto the dedicated **`mail` queue**, only after the surrounding DB transaction commits;
+- throttled by the shared `mail` rate limiter (`RESEND_RATE_LIMIT_PER_SECOND`, Resend's per-team API limit). Every worker draws from one budget, and a throttled job is released back onto the queue, not failed;
+- send errors retried with backoff (10s → 1m → 5m → 15m → 30m), up to 5 real errors inside a 6-hour window, then moved to `failed_jobs` and logged to the owning domain's channel by `failed()`. Retry with `php artisan queue:retry`. Failed jobs are pruned after 30 days (`routes/console.php`).
 
 Money and dates in emails are formatted at render time only, from the stored `amount_minor`/`currency_code` — never pre-formatted and stored, per the database design's money-handling rule.
 
@@ -208,6 +216,7 @@ The saga and outbox pattern from the architecture doc need real queue infrastruc
 - Laravel Queues (Redis or SQS driver) for all cross-domain side effects — sending emails, publishing outbox events, calculating payouts.
 - A scheduled Artisan command (`outbox:relay`), run every few seconds via the scheduler or a dedicated worker, that reads unpublished rows from each domain's `outbox_events` table and publishes them to the broker — implementing the relay process the architecture doc specifies, as actual code rather than a diagram.
 - Every Job class that consumes an event must be **idempotent** — checked against the "at-least-once delivery" assumption in the event catalog. A `PaymentSucceededListener` that updates `sessions.status` should check current status before transitioning, not blindly overwrite it, so a redelivered event is a no-op the second time.
+- Workers must listen on the `mail` queue as well as `default`: `php artisan queue:work --queue=mail,default` (run it under Supervisor/systemd in production, and `queue:restart` on deploy). `composer dev` already runs `queue:listen --queue=mail,default` plus `schedule:work` locally.
 - Failed jobs go to Laravel's `failed_jobs` table with retry/backoff configured per job type; anything touching Payment gets alerting on failure, not just silent retry.
 
 ---

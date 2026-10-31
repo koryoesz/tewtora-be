@@ -19,8 +19,39 @@ Two separate backend services, two separate base URLs:
 
 ## 1. Auth
 
-There's no registration endpoint yet — accounts have to exist already
-(seeded/created directly for now). Everything else works:
+### `POST /auth/register`
+Self-service sign-up for **parents, independent students and teachers**.
+A child's login is created by its parent (§4); admins can't self-register.
+Throttled to 10 requests/minute per IP.
+```json
+// request — account_type: parent | independent_student | teacher; phone optional
+{ "account_type": "parent", "email": "parent@example.test",
+  "password": "secret123", "password_confirmation": "secret123" }
+// request — a teacher: same fields plus a required `name` (2-160 chars, no
+// phone numbers/emails/links). `name` is ignored for any other account_type.
+{ "account_type": "teacher", "name": "Amaka Obi", "email": "amaka@example.test",
+  "password": "secret123", "password_confirmation": "secret123" }
+// response 201 — same shape as login, already signed in
+{ "token": "1|abcdef123456..." }
+// response 422 — email taken, password under 8 chars / unconfirmed, a
+// teacher with no/invalid name, or account_type child/admin
+{ "error": { "code": "validation_failed", "message": "...", "fields": { "email": ["..."] }, "request_id": "req_..." } }
+// response 409 — only if two sign-ups for one email race each other
+{ "error": { "code": "email_already_registered", "message": "An account with this email already exists.", "request_id": "req_..." } }
+```
+A welcome email (`WelcomeToTewtora`, sent via Resend, queued) goes out on
+every successful sign-up, with a button to `FRONTEND_URL/dashboard`.
+No email-verification step exists yet (`email_verified_at` stays null),
+and an independent student's own learner profile isn't created by this
+call.
+
+**A new teacher** starts as a pending applicant with only a name: subjects,
+curricula, levels, format, rate, experience, availability and bio are all
+`null`/empty until the onboarding wizard sends them via
+`PATCH /teachers/{teacher_id}` (get `teacher_id` from `GET /auth/session`).
+They don't appear in `GET /teachers` until approved, and an admin can't
+approve them until format, rate and experience are filled in
+(`409 teacher_profile_incomplete`).
 
 ### `POST /auth/login`
 Two credential shapes, same endpoint — exactly one pair, never a mix:
@@ -800,7 +831,6 @@ just unwritten code — don't estimate it as "almost done."
 
 ## 16. Not implemented anywhere (don't build UI expecting these yet)
 
-- Account registration
 - `/matches` (ranked teacher results from an assessment)
 - Live session (join/leave/chat/whiteboard)
 - Teacher roster, teacher stats, teacher schedule diary, teacher

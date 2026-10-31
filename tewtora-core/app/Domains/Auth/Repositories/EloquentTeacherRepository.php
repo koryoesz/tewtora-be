@@ -2,10 +2,12 @@
 
 namespace App\Domains\Auth\Repositories;
 
+use App\Domains\Auth\Models\Account;
 use App\Domains\Auth\Models\Curriculum;
 use App\Domains\Auth\Models\Subject;
 use App\Domains\Auth\Models\Teacher;
 use App\Domains\Auth\Models\TeacherAvailability;
+use App\Domains\Auth\Models\TeacherVerificationCheck;
 use App\Domains\Auth\Support\Weekday;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
@@ -25,6 +27,25 @@ class EloquentTeacherRepository implements TeacherRepositoryInterface
     public function pendingVerification(): Collection
     {
         return Teacher::where('verification_status', 'pending')->get();
+    }
+
+    public function createApplicant(Account $account, string $fullName): Teacher
+    {
+        return DB::transaction(function () use ($account, $fullName) {
+            // public_id is DB-generated (DEFAULT (UUID())) — create()'s
+            // in-memory model doesn't know it without a refresh.
+            $teacher = Teacher::create([
+                'account_id' => $account->id,
+                'full_name' => $fullName,
+                'verification_status' => 'pending',
+            ])->refresh();
+
+            foreach (TeacherVerificationCheck::KINDS as $kind) {
+                TeacherVerificationCheck::create(['teacher_id' => $teacher->id, 'kind' => $kind, 'state' => 'pending']);
+            }
+
+            return $teacher;
+        });
     }
 
     public function search(array $filters): Collection

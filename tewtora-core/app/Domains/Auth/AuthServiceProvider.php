@@ -40,5 +40,9 @@ class AuthServiceProvider extends ServiceProvider
         Gate::policy(LearnerProfile::class, LearnerProfilePolicy::class);
         Gate::policy(Teacher::class, TeacherPolicy::class);
         Gate::policy(Assessment::class, AssessmentPolicy::class);
+
+        // Mail templates live with the domain (backend-engineering-standards.md §5),
+        // not in resources/views; the shared brand layout is registered in AppServiceProvider.
+        $this->loadViewsFrom(__DIR__.'/Mail/views', 'auth-mail');
     }
 }

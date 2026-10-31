@@ -227,12 +227,12 @@ CREATE TABLE teachers (
   id                    BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   public_id             CHAR(36) NOT NULL DEFAULT (UUID()) UNIQUE,
   account_id            BIGINT UNSIGNED NOT NULL UNIQUE,
-  years_experience      SMALLINT UNSIGNED NOT NULL,
+  years_experience      SMALLINT UNSIGNED,     -- null until onboarding fills it in (self-sign-up)
   bio                   TEXT,
-  preferred_format      VARCHAR(15) NOT NULL
+  preferred_format      VARCHAR(15)            -- null until onboarding, as above
                           CHECK (preferred_format IN ('one_on_one','group','both')),
   max_group_size        SMALLINT UNSIGNED,
-  rate_minor            BIGINT NOT NULL CHECK (rate_minor >= 0),
+  rate_minor            BIGINT CHECK (rate_minor >= 0),  -- null until onboarding; approval requires all three
   currency_code         CHAR(3) NOT NULL DEFAULT 'NGN',
   id_verified_at        DATETIME(6),
   credentials_verified_at DATETIME(6),

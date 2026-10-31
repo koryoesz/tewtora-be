@@ -13,12 +13,14 @@ use App\Domains\Auth\Http\Controllers\TeacherController;
 use Illuminate\Support\Facades\Route;
 
 /*
-| Auth & Onboarding routes. Still outstanding: account registration (not in
-| docs/api-contract.md §0's own endpoint list), §15/§16's matching-ops and
+| Auth & Onboarding routes. Still outstanding: §15/§16's matching-ops and
 | stuck-money admin screens, teacher roster/diary (§12/§13).
 */
 
 Route::post('/auth/login', [AuthController::class, 'login']);
+// Parent / independent student / teacher — see RegisterRequest's docblock.
+// Throttled since it's unauthenticated and creates rows.
+Route::post('/auth/register', [AuthController::class, 'register'])->middleware('throttle:10,1');
 
 Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/auth/logout', [AuthController::class, 'logout']);
