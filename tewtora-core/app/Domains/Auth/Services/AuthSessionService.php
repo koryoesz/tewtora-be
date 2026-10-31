@@ -56,18 +56,23 @@ class AuthSessionService
      * the same token shape as login(). email_verified_at stays null — no
      * verification-mail flow exists yet.
      *
-     * A teacher also gets a pending auth.teachers row (see
-     * TeacherRepositoryInterface::createApplicant) and a TeacherRegistered
-     * outbox event in the same transaction — Core's teacher_account_links
-     * and Recommendation's teacher_profile_view are built from that event,
-     * never written from here.
+     * All-or-nothing: the account, a teacher's pending auth.teachers row
+     * (TeacherRepositoryInterface::createApplicant), the TeacherRegistered
+     * outbox event and the login token are written in one transaction, so a
+     * failure at any step leaves no account behind. Core's
+     * teacher_account_links and Recommendation's teacher_profile_view are
+     * built from that event, never written from here.
+     *
+     * Logging and queueing the welcome email happen after the commit and are
+     * best-effort (afterRegistration()): once the account and its token
+     * exist, they can no longer turn the sign-up into an error.
      *
      * @param  array{account_type: string, email: string, password: string, phone?: ?string, name?: string}  $data
      */
     public function register(array $data): NewAccessToken
     {
         try {
-            $account = DB::transaction(function () use ($data) {
+            [$account, $token] = DB::transaction(function () use ($data) {
                 // public_id is DB-generated (DEFAULT (UUID())) — create()'s
                 // in-memory model doesn't know it without a refresh.
                 $account = $this->accounts->create([
@@ -93,32 +98,45 @@ class AuthSessionService
                     ]);
                 }
 
-                return $account;
+                // Inside the transaction (personal_access_tokens is on the same
+                // connection): a failed token insert must roll the account back,
+                // not leave a saved account behind a 500.
+                $token = $account->createToken('web', self::ABILITIES[$account->account_type] ?? []);
+
+                return [$account, $token];
             });
         } catch (UniqueConstraintViolationException) {
             throw new EmailAlreadyRegisteredException;
         }
 
-        Log::channel('auth')->info('account registered', [
-            'account_id' => $account->public_id,
-            'account_type' => $account->account_type,
-        ]);
+        $this->afterRegistration($account, $data['name'] ?? null);
 
-        // Only pushes onto the `mail` queue (QueuedMailable); the actual send,
-        // its retries and Resend rate limiting happen in the worker. The
-        // account already exists by now, so a failed push (queue store down,
-        // or a Resend error under QUEUE_CONNECTION=sync) must not turn the
-        // sign-up into an error response.
+        return $token;
+    }
+
+    /**
+     * Never throws: the account is committed and the caller gets its token
+     * either way. Only pushes the welcome email onto the `mail` queue
+     * (QueuedMailable); the send, its retries and Resend rate limiting
+     * happen in the worker.
+     */
+    private function afterRegistration(Account $account, ?string $name): void
+    {
         try {
-            Mail::to($account->email)->queue(new WelcomeToTewtora($account, $data['name'] ?? null));
+            Log::channel('auth')->info('account registered', [
+                'account_id' => $account->public_id,
+                'account_type' => $account->account_type,
+            ]);
+
+            Mail::to($account->email)->queue(new WelcomeToTewtora($account, $name));
         } catch (Throwable $e) {
-            Log::channel('auth')->error('welcome email could not be queued', [
+            // rescue(): if logging itself is what failed, don't let reporting
+            // that failure throw a second time.
+            rescue(fn () => Log::channel('auth')->error('post-registration step failed', [
                 'account_id' => $account->public_id,
                 'exception' => $e,
-            ]);
+            ]), report: false);
         }
-
-        return $account->createToken('web', self::ABILITIES[$account->account_type] ?? []);
     }
 
     private function loginWithPassword(string $email, string $password): NewAccessToken

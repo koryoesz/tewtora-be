@@ -9,6 +9,7 @@ use App\Domains\Auth\Models\Account;
 use App\Domains\Auth\Repositories\AccountRepositoryInterface;
 use Illuminate\Contracts\Auth\PasswordBroker;
 use Illuminate\Mail\Mailable;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -43,7 +44,8 @@ class PasswordResetService
             $this->queueMail($account, new PasswordResetLink($account, $token));
         });
 
-        Log::channel('auth')->info('password reset requested', ['status' => $status]);
+        // The link may already be queued; a logging failure mustn't turn that into an error.
+        rescue(fn () => Log::channel('auth')->info('password reset requested', ['status' => $status]), report: false);
     }
 
     /**
@@ -55,36 +57,53 @@ class PasswordResetService
     {
         $resetAccount = null;
 
-        $status = Password::broker()->reset($credentials, function (Account $account, string $password) use (&$resetAccount) {
-            $this->accounts->updatePasswordHash($account, Hash::make($password));
+        // One transaction: the new password, revoking every login token and
+        // consuming the reset token (the broker deletes it after the callback)
+        // all land together, or none of them do. No half-reset account whose
+        // old sessions survive, and no spent token for a password that didn't change.
+        // A regular closure, not fn(): an arrow function captures $resetAccount
+        // by value, so the inner callback's assignment would never reach here.
+        $status = DB::transaction(function () use ($credentials, &$resetAccount) {
+            return Password::broker()->reset($credentials, function (Account $account, string $password) use (&$resetAccount) {
+                $this->accounts->updatePasswordHash($account, Hash::make($password));
 
-            // Signs the account out everywhere: whoever reset the password
-            // may be locking out someone who had got in with the old one.
-            $account->tokens()->delete();
+                // Signs the account out everywhere: whoever reset the password
+                // may be locking out someone who had got in with the old one.
+                $account->tokens()->delete();
 
-            $resetAccount = $account;
+                $resetAccount = $account;
+            });
         });
 
         if ($status !== PasswordBroker::PASSWORD_RESET) {
             throw new InvalidPasswordResetTokenException;
         }
 
-        Log::channel('auth')->info('password reset', ['account_id' => $resetAccount->public_id]);
-
-        $this->queueMail($resetAccount, new PasswordChanged($resetAccount));
+        $this->bestEffort($resetAccount, function () use ($resetAccount) {
+            Log::channel('auth')->info('password reset', ['account_id' => $resetAccount->public_id]);
+            Mail::to($resetAccount->email)->queue(new PasswordChanged($resetAccount));
+        });
     }
 
-    /** Same reasoning as AuthSessionService::register(): a mail/queue failure must not fail the request. */
     private function queueMail(Account $account, Mailable $mail): void
     {
+        $this->bestEffort($account, fn () => Mail::to($account->email)->queue($mail));
+    }
+
+    /**
+     * For side effects after the real change is committed (logging, queueing
+     * an email): they must never turn a completed request into an error, same
+     * as AuthSessionService::afterRegistration().
+     */
+    private function bestEffort(Account $account, callable $step): void
+    {
         try {
-            Mail::to($account->email)->queue($mail);
+            $step();
         } catch (Throwable $e) {
-            Log::channel('auth')->error('password email could not be queued', [
+            rescue(fn () => Log::channel('auth')->error('password follow-up step failed', [
                 'account_id' => $account->public_id,
-                'mailable' => $mail::class,
                 'exception' => $e,
-            ]);
+            ]), report: false);
         }
     }
 }

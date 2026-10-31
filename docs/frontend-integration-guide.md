@@ -25,6 +25,9 @@ A child's login is created by its parent (§4); admins can't self-register.
 Throttled to 10 requests/minute per IP.
 ```json
 // request — account_type: parent | independent_student | teacher; phone optional
+// phone: string (preferred) or number; spaces, dashes, dots and brackets are stripped,
+// then it must be an optional + and 7-15 digits (stored cleaned, e.g. "+2348012345678").
+// Otherwise 422 with error.fields.phone: "Enter a valid phone number, for example +2348012345678."
 { "account_type": "parent", "email": "parent@example.test",
   "password": "secret123", "password_confirmation": "secret123" }
 // request — a teacher: same fields plus a required `name` (2-160 chars, no
