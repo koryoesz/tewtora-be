@@ -14,6 +14,20 @@ return [
     |
     */
 
+    // Paystack (docs/microservices-architecture.md §7.1: primary provider for
+    // Nigeria). The secret key both authenticates API calls and signs
+    // webhooks (HMAC-SHA512 of the raw body).
+    'paystack' => [
+        'secret_key' => env('PAYSTACK_SECRET_KEY'),
+        'base_url' => env('PAYSTACK_BASE_URL', 'https://api.paystack.co'),
+    ],
+
+    // Shared secret for service-to-service calls (tewtora-core ->
+    // /internal/*). Must match tewtora-core's INTERNAL_SERVICE_TOKEN.
+    'internal' => [
+        'token' => env('INTERNAL_SERVICE_TOKEN'),
+    ],
+
     'postmark' => [
         'key' => env('POSTMARK_API_KEY'),
     ],

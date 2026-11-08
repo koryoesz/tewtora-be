@@ -18,6 +18,13 @@ return [
         'key' => env('POSTMARK_API_KEY'),
     ],
 
+    // tewtora-payment's internal API (Core -> Payment checkout calls). The
+    // token is shared with tewtora-payment's INTERNAL_SERVICE_TOKEN.
+    'payment' => [
+        'url' => env('PAYMENT_SERVICE_URL', 'http://localhost:8001'),
+        'internal_token' => env('INTERNAL_SERVICE_TOKEN'),
+    ],
+
     'resend' => [
         'key' => env('RESEND_API_KEY'),
         // Resend's per-team API limit (2/s by default) — raise it only if

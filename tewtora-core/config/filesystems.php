@@ -28,6 +28,10 @@ return [
     |
     */
 
+    // Where Tewtora class cover images live: `public` locally (run
+    // `php artisan storage:link`), `s3` in production.
+    'class_images_disk' => env('CLASS_IMAGES_DISK', 'public'),
+
     'disks' => [
 
         'local' => [

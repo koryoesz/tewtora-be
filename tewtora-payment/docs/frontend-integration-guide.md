@@ -858,6 +858,48 @@ just unwritten code — don't estimate it as "almost done."
 
 ---
 
+## Tewtora classes
+
+Courses Tewtora runs itself on a fixed timetable. This is the contract from
+tewtora-fe `docs/needed-endpoints-tewtora-classes.md`, with the same field
+names as `lib/classes.ts`. Times are Lagos (`+01:00`), money is
+`price_minor` (kobo) + `currency_code`, and `price_minor: 0` is a free class.
+
+### Families (any signed-in account can browse; only the payer can enrol)
+
+| Endpoint | Notes |
+|---|---|
+| `GET /classes?status=&subject=&curriculum=&level=` | The catalogue. `status` is `active` / `upcoming` / `completed`, **computed by the backend** from the class days. Running and upcoming classes come first, soonest first; finished ones after. Each item: `id, title, subject, subject_code, description, art` (`maths/english/science/coding`), `image_url` (null = use `art`), `level, curriculum, curriculum_name, format` (`small_group/live_class`), `rating_avg, rating_count, teacher, days` (ISO, Mon = 1), `starts_at_time, ends_at_time` ("HH:MM" Lagos), `total_days, days_done, next_day {day, starts_at}, starts_on, ends_on, status, capacity, seats_left` (null = no cap), `price_minor, currency_code, is_free, enrollment_open, enrolled_learner_ids` (which of *your* learners hold a seat). |
+| `GET /classes/{id}` | Same item plus `sessions[]`. Drafts 404; a cancelled class only shows to families who were in it (with `cancellation_reason`). |
+| `GET /classes/{id}/sessions` | Class days: `{ id, day, date, starts_at, ends_at, status (upcoming/live/completed), meeting_url }`. `meeting_url` is **null unless you hold a confirmed seat and it's within 60 min of the start until the end** (admins and the class teacher always see it). Your Join button's 10-minute rule stays as is. |
+| `GET /classes/sessions?from=YYYY-MM-DD&to=YYYY-MM-DD` | The week strip and schedule: class days across all classes in the range (≤ 62 days), each with `class { id, title, subject, art, total_days }`. |
+| `POST /classes/{id}/enrolments` `{ learner_id }` (`/enrollments` also works) | Parent (own child) or independent student (self), otherwise 403. **Paid:** `201`, `status: "pending_payment"`, `checkout_url` (send the user there), `hold_expires_at` (seat held 30 min). A retry returns the same enrolment (`200`). **Free:** `201`, `status: "confirmed"`. Allowed until the last class day ends, so the user can join a running class. |
+| `POST /class-enrollments/{id}/verify-payment` | Call when Paystack redirects back to `/classes/{classId}/enrollments/{enrollmentId}/complete`; returns `confirmed` once paid. Safe to poll. |
+| `GET /class-enrollments`, `GET /class-enrollments/{id}` | Your enrolments (a child login sees its own). |
+| `POST /classes/{id}/rating` `{ rating: 1-5, comment? }` | Payer with a confirmed seat, once a class day has finished. Rating again replaces your rating. Returns `{ rating_avg, rating_count }`. |
+
+Errors: `409 class_full`, `409 class_not_open`, `409 already_enrolled`,
+`409 class_not_rateable_yet`, `503 payment_unavailable` (nothing charged,
+seat released; try again). A confirmation email (receipt + class days +
+"Go to your class") is sent when a seat is confirmed. It contains no
+meeting link; links live on the class page.
+
+### Admins (`/internal/classes`, admin accounts only)
+
+| Endpoint | Notes |
+|---|---|
+| `POST /internal/classes` | JSON or multipart. `title` required. Optional: `description, subject, curriculum` (codes), `level` (free text, e.g. "JSS 2"), `format, art, teacher_id` (approved teacher), `price_minor` (default 0 = free), `currency_code` (NGN default), `capacity` (omit = no cap), `meeting_link` (class-wide default, https), `image` (jpg/png/webp ≤ 5 MB), `publish`. Class days: **either** `schedule: { starts_on, days: [2,4], start_time: "16:00", end_time: "17:00", total_days: 12 }` (generated in Lagos time) **or** `sessions: [{ starts_at, ends_at, meeting_link? }]`. |
+| `PATCH /internal/classes/{id}` | Any field; `schedule`/`sessions` replace all days. Price frozen once anyone enrolled (`409 class_fee_locked`); capacity can't drop below seats taken. |
+| `PATCH /internal/classes/{id}/sessions/{day}` | Post/change one day's `meeting_link` (null = fall back to the class link), or move the day (`starts_at` + `ends_at`; days renumber by date). |
+| `POST /internal/classes/{id}/publish` | Needs at least one class day not yet in the past. A meeting link is not required (post it per day later). |
+| `POST /internal/classes/{id}/cancel` `{ reason }` | Cancels every seat and emails families who had one. No refunds in v1. |
+| `POST /internal/classes/{id}/image`, `DELETE …/image` | Replace or remove the cover image. |
+| `GET /internal/classes?status=`, `GET /internal/classes/{id}`, `GET /internal/classes/{id}/enrollments` | Admin views add `lifecycle` (draft/published/cancelled/completed), `meeting_link`, `seats_taken`, timestamps, and the roster. |
+
+The class teacher sees the roster at `GET /classes/{id}/roster`.
+
+---
+
 ## 16. Not implemented anywhere (don't build UI expecting these yet)
 
 - `/matches` (ranked teacher results from an assessment)

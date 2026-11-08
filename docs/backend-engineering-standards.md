@@ -87,6 +87,15 @@ Domain exceptions, one per business rule that can realistically fail — pulled 
 | `EmailAlreadyRegisteredException` | Auth | Two sign-ups for the same email race past validation and hit the unique index |
 | `TeacherProfileIncompleteException` | Auth | A teacher is approved while `years_experience`, `preferred_format` or `rate_minor` is still null |
 | `InvalidPasswordResetTokenException` | Auth | `POST /auth/reset-password` with a wrong, used or expired token, or an unknown email (deliberately indistinguishable) |
+| `ClassFullException` | Core | Enrolling when every seat is confirmed or held by a live pending payment |
+| `ClassNotOpenForEnrollmentException` | Core | Enrolling in a class that isn't published or has already started |
+| `AlreadyEnrolledException` | Core | The learner already has a confirmed seat in the class |
+| `ClassFeeLockedException` | Core | Changing a class's price/currency after anyone enrolled |
+| `ClassCapacityBelowEnrollmentsException` | Core | Lowering capacity below the seats already taken |
+| `ClassNotEditableException` | Core | Editing/publishing/cancelling a cancelled or completed class |
+| `ClassNotPublishableException` | Core | Publishing without a class day that's still to come |
+| `ClassNotRateableYetException` | Core | Rating a class before any of its days has finished |
+| `PaymentServiceUnavailableException` | Core | Core can't start/check a checkout with the Payment service |
 
 A single `Shared/Exceptions/Handler.php` (extending Laravel's) catches `AppException` and renders the standard error envelope (section 6) — domain code just throws, it never formats HTTP responses itself.
 
@@ -143,6 +152,8 @@ Use Laravel **Mailables** with Markdown mail templates (`Illuminate\Mail\Mailabl
 | `WelcomeToTewtora` | `POST /auth/register` succeeds (copy varies by account type) | Parent / independent student / teacher |
 | `PasswordResetLink` | `POST /auth/forgot-password` (job payload encrypted, since it carries the token) | Account owner |
 | `PasswordChanged` | `POST /auth/reset-password` succeeds | Account owner |
+| `ClassEnrollmentConfirmed` | A class seat is confirmed (paid or free); doubles as the receipt | Payer |
+| `ClassCancelled` | An admin cancels a class | Payers with a confirmed seat |
 | `TeacherVerificationDecision` | `verification_status` changes | Teacher |
 | `MatchRecommended` | New `matches` row created | Parent / independent student |
 | `TrialConfirmed` | Trial session booked | Parent/student + teacher |

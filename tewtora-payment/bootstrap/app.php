@@ -1,6 +1,7 @@
 <?php
 
 use App\Shared\Auth\TrustGatewayIdentity;
+use App\Shared\Auth\VerifyInternalToken;
 use App\Shared\Exceptions\AppException;
 use App\Shared\Logging\AssignRequestId;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -28,6 +29,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->alias([
             'gateway.identity' => TrustGatewayIdentity::class,
+            'internal.token' => VerifyInternalToken::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

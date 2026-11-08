@@ -13,6 +13,8 @@ class Payment extends Model
 {
     public $timestamps = false;
 
+    public const PURPOSE_CLASS_ENROLLMENT = 'class_enrollment';
+
     protected $fillable = [
         'quote_id',
         'payer_account_id',
@@ -25,6 +27,12 @@ class Payment extends Model
         'currency_code',
         'status',
         'provider_reference',
+        'purpose',
+        'purpose_ref',
+        'checkout_url',
+        'channel',
+        'failure_reason',
+        'paid_at',
     ];
 
     protected function casts(): array
@@ -33,7 +41,13 @@ class Payment extends Model
             'amount_minor' => 'integer',
             'sessions_covered' => 'integer',
             'created_at' => 'datetime',
+            'paid_at' => 'datetime',
         ];
+    }
+
+    public function getRouteKeyName(): string
+    {
+        return 'public_id';
     }
 
     public function quote()
