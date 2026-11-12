@@ -2,6 +2,7 @@
 
 namespace App\Domains\Auth;
 
+use App\Domains\Auth\Contracts\AuthDirectory;
 use App\Domains\Auth\Models\Assessment;
 use App\Domains\Auth\Models\LearnerProfile;
 use App\Domains\Auth\Models\Teacher;
@@ -20,6 +21,7 @@ use App\Domains\Auth\Repositories\EloquentTeacherRepository;
 use App\Domains\Auth\Repositories\LearnerProfileRepositoryInterface;
 use App\Domains\Auth\Repositories\SubjectRepositoryInterface;
 use App\Domains\Auth\Repositories\TeacherRepositoryInterface;
+use App\Domains\Auth\Services\EloquentAuthDirectory;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 
@@ -33,6 +35,9 @@ class AuthServiceProvider extends ServiceProvider
         $this->app->bind(AssessmentRepositoryInterface::class, EloquentAssessmentRepository::class);
         $this->app->bind(CurriculumRepositoryInterface::class, EloquentCurriculumRepository::class);
         $this->app->bind(SubjectRepositoryInterface::class, EloquentSubjectRepository::class);
+
+        // Auth's service interface for other domains — see AuthDirectory.
+        $this->app->bind(AuthDirectory::class, EloquentAuthDirectory::class);
     }
 
     public function boot(): void

@@ -1,11 +1,15 @@
 <?php
 
+use App\Domains\Core\Http\Controllers\AdminPaymentController;
+use App\Domains\Core\Http\Controllers\AdminTewtoraClassController;
+use App\Domains\Core\Http\Controllers\ClassEnrollmentController;
 use App\Domains\Core\Http\Controllers\FeedbackController;
 use App\Domains\Core\Http\Controllers\MessageThreadController;
 use App\Domains\Core\Http\Controllers\MoveRequestController;
 use App\Domains\Core\Http\Controllers\PlanController;
 use App\Domains\Core\Http\Controllers\PricingController;
 use App\Domains\Core\Http\Controllers\TeacherClassController;
+use App\Domains\Core\Http\Controllers\TewtoraClassController;
 use App\Domains\Core\Http\Controllers\TrialRequestController;
 use Illuminate\Support\Facades\Route;
 
@@ -62,4 +66,40 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/messages/threads/{thread:public_id}/report', [MessageThreadController::class, 'report']);
 
     Route::get('/pricing', [PricingController::class, 'index']);
+
+    // Tewtora classes — tewtora-fe docs/needed-endpoints-tewtora-classes.md.
+    // Families browse, enrol and pay; the class teacher sees the roster.
+    // /classes/sessions must stay above /classes/{class}.
+    Route::get('/classes', [TewtoraClassController::class, 'index']);
+    Route::get('/classes/sessions', [TewtoraClassController::class, 'schedule']);
+    Route::get('/classes/{class:public_id}', [TewtoraClassController::class, 'show']);
+    Route::get('/classes/{class:public_id}/sessions', [TewtoraClassController::class, 'sessions']);
+    Route::get('/classes/{class:public_id}/roster', [TewtoraClassController::class, 'roster']);
+    Route::post('/classes/{class:public_id}/rating', [TewtoraClassController::class, 'rate']);
+    // Both spellings: the frontend spec says "enrolments". Throttled: each call can start a Paystack checkout.
+    Route::post('/classes/{class:public_id}/enrolments', [TewtoraClassController::class, 'enroll'])->middleware('throttle:20,1');
+    Route::post('/classes/{class:public_id}/enrollments', [TewtoraClassController::class, 'enroll'])->middleware('throttle:20,1');
+    Route::get('/class-enrollments', [ClassEnrollmentController::class, 'index']);
+    // By Paystack's ?reference= on the return page; must stay above /class-enrollments/{enrollment}.
+    Route::post('/class-enrollments/verify-payment', [ClassEnrollmentController::class, 'verifyPaymentByReference'])->middleware('throttle:30,1');
+    Route::get('/class-enrollments/{enrollment:public_id}', [ClassEnrollmentController::class, 'show']);
+    Route::post('/class-enrollments/{enrollment:public_id}/verify-payment', [ClassEnrollmentController::class, 'verifyPayment'])->middleware('throttle:30,1');
+});
+
+// Tewtora classes — admin management.
+Route::prefix('internal')->middleware(['auth:sanctum', 'admin'])->group(function () {
+    Route::get('/classes', [AdminTewtoraClassController::class, 'index']);
+    Route::post('/classes', [AdminTewtoraClassController::class, 'store']);
+    Route::get('/classes/{class:public_id}', [AdminTewtoraClassController::class, 'show']);
+    Route::patch('/classes/{class:public_id}', [AdminTewtoraClassController::class, 'update']);
+    Route::patch('/classes/{class:public_id}/sessions/{day}', [AdminTewtoraClassController::class, 'updateSession'])->whereNumber('day');
+    Route::post('/classes/{class:public_id}/publish', [AdminTewtoraClassController::class, 'publish']);
+    Route::post('/classes/{class:public_id}/cancel', [AdminTewtoraClassController::class, 'cancel']);
+    Route::post('/classes/{class:public_id}/image', [AdminTewtoraClassController::class, 'uploadImage']);
+    Route::delete('/classes/{class:public_id}/image', [AdminTewtoraClassController::class, 'deleteImage']);
+    Route::get('/classes/{class:public_id}/enrollments', [AdminTewtoraClassController::class, 'roster']);
+
+    // Staff Payments page — tewtora-fe docs/needed-endpoints-admin-payments.md.
+    Route::get('/payments', [AdminPaymentController::class, 'index']);
+    Route::get('/payments/summary', [AdminPaymentController::class, 'summary']);
 });

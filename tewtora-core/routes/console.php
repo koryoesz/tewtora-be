@@ -16,3 +16,8 @@ Schedule::command('outbox:relay')->everyMinute()->withoutOverlapping();
 // Failed jobs (e.g. an email Resend kept rejecting) stay retryable with
 // `queue:retry` for 30 days, then are pruned so the table doesn't grow forever.
 Schedule::command('queue:prune-failed --hours=720')->daily();
+
+// Tewtora classes: give unpaid seats back once their hold runs out, and
+// close classes whose last session has ended.
+Schedule::command('classes:expire-holds')->everyMinute()->withoutOverlapping();
+Schedule::command('classes:complete-finished')->hourly()->withoutOverlapping();

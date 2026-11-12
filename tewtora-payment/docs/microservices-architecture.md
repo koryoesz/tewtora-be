@@ -32,7 +32,7 @@ The backend splits into four services, not three. Auth & Onboarding, Recommendat
 |---|---|---|
 | **Auth & Onboarding** | `accounts`, `learner_profiles`, `assessments`, `assessment_subjects`, `teachers`, `teacher_subjects`, `teacher_curricula`, `teacher_availability`, `teacher_verification_checks`, `teacher_time_off`, `safeguarding_incidents`, `audit_log`, `subjects`, `curricula`, `password_reset_tokens` | MySQL |
 | **Recommendation** | `matches`, `recruitment_targets`, plus local read models: `learner_profile_view`, `teacher_profile_view` (synced via events, never queried live from Auth) | MySQL (+ OpenSearch/a vector store if matching becomes similarity-based — MySQL has no pgvector equivalent) |
-| **Main / Core** | `plans`, `plan_goals`, `sessions`, `trial_requests`, `move_requests`, `move_approvals`, `feedback`, `progress_reports`, `ratings` | MySQL |
+| **Main / Core** | `plans`, `plan_goals`, `sessions`, `trial_requests`, `move_requests`, `move_approvals`, `feedback`, `progress_reports`, `ratings`, `tewtora_classes`, `tewtora_class_sessions`, `class_enrollments`, `class_ratings` | MySQL |
 | **Payment** | `payments`, `payouts`, `payment_methods`, `payment_providers`, `payment_quotes`, `payment_line_items`, `commission_tiers`, `payment_audit_log` | MySQL — isolated instance/cluster, minimal IAM surface, append-only ledger discipline |
 
 `teacher_verification_checks`, `audit_log`, and `safeguarding_incidents` (Auth), and `payment_audit_log` (Payment) were added implementing `docs/api-contract.md` §3/§14-18 — see §7.6 and `docs/database-design.md` §3.7 for the DDL. `plans` (§4/§6 below) is the single largest addition: almost every other new table in Core hangs off it.
@@ -137,14 +137,16 @@ CREATE TABLE outbox_events (
 | `TeacherRegistered` | Auth | Main, Recommendation | teacher_id, public_id, account_id, verification_status | ≥ once |
 | `TeacherVerified` | Auth | Recommendation | teacher_id, verification_status, subjects, curricula | ≥ once |
 | `MatchAccepted` | Recommendation | Main | match_id, learner_profile_id, teacher_id | sync call |
-| `PaymentSucceeded` | Payment | Main | payment_id, session_id, provider_reference, amount_minor | ≥ once |
-| `PaymentFailed` | Payment | Main | payment_id, session_id, provider_reference, failure_reason | ≥ once |
+| `PaymentSucceeded` | Payment | Main | payment_id, purpose, purpose_ref, amount_minor, currency_code, provider_reference, channel, paid_at | ≥ once |
+| `PaymentFailed` | Payment | Main | payment_id, purpose, purpose_ref, amount_minor, currency_code, provider_reference, channel, paid_at (null) | ≥ once |
 | `SessionCompleted` | Main | Payment | session_id, teacher_id, scheduled_at | ≥ once |
 | `SessionFeedbackFiled` | Main | Payment | session_id, feedback_id | ≥ once |
 
 "≥ once" (at-least-once) delivery is assumed throughout — every consumer must be written to safely process the same event twice.
 
 `SessionFeedbackFiled` (v2.2) is deliberately separate from `SessionCompleted`: the product's payment rule releases a session's held fee only once its feedback is *filed*, not merely once the session has happened (`docs/api-contract.md` §11) — a teacher who skips feedback keeps that session's fee held indefinitely, which is the intended pressure, not a bug to route around by releasing on `SessionCompleted` alone. Payment's listener must only transition a `payment_line_items` row `held → released`, never re-apply to an already-`released` row — the same idempotency discipline as the webhook handler (§7.3).
+
+Tewtora classes (v2.3) are the first `PaymentSucceeded` consumer: Core starts a checkout with a sync call (`POST /internal/checkouts` on Payment, shared `INTERNAL_SERVICE_TOKEN`, idempotent on `purpose`+`purpose_ref`), Payment settles it from Paystack's signed webhook and writes the event, its own `outbox:relay` publishes it, and Core's `payments:consume` confirms the enrolment. Core also confirms immediately when the payer returns (`verify-payment` → Payment re-verifies with Paystack), which doubles as the safety net for a missed webhook. Both paths go through one idempotent `confirmPayment()`. Core reads learners/teachers/subjects through Auth's `AuthDirectory` service interface (sync, in-process today), not the `*_account_links` read models, so a just-added child can enrol at once.
 
 `TeacherRegistered` is written by `POST /auth/register` (account_type `teacher`) in the same transaction as the new account and `teachers` row. It's what Main's `teacher_account_links` and Recommendation's `teacher_profile_view` rows are meant to be created from, keyed on `teacher_id`, so a redelivery upserts the same row rather than inserting a second. **No consumer exists yet** — until one does, a self-signed-up teacher has neither row (the seeder writes them directly for its fixture teacher).
 
@@ -238,11 +240,19 @@ ALTER TABLE payments
 2. The provider processes the charge and calls back to `POST /webhooks/{provider}`.
 3. Payment service verifies the webhook signature (provider-specific HMAC secret, retrieved via `webhook_secret_ref`) before trusting the payload — an unverified webhook is not evidence of anything.
 4. Payment service looks up the `payments` row by `(provider_id, provider_reference)`, updates status, and writes an outbox event: `PaymentSucceeded` or `PaymentFailed`.
-5. If the same `provider_reference` arrives twice (a provider retry, which will happen), the unique index plus an idempotent update (only transition from `'processing'`, never re-apply to an already-`'success'` row) prevents double-processing.
+5. If the same `provider_reference` arrives twice (a provider retry, which will happen), the unique index plus an idempotent update prevents double-processing. Allowed transitions: `processing → success | failed`, and `failed → success`; `success` is final. A failure is deliberately *not* final: a declined card followed by a retry on the same Paystack checkout succeeds on the same reference, and that money must still reach Main (a second `PaymentSucceeded` after the `PaymentFailed`). A stale failure after a success is a no-op.
+6. A success for an amount/currency other than the one we initialized never settles; it's logged as critical and flagged (`failure_reason = 'amount_mismatch'`) for a human.
+7. Main also checks, before confirming anything, that Payment's record of the payment names *its* enrolment (`purpose` + `purpose_ref`, and the checkout's own `payment_id`). A payment can never buy a seat it wasn't made for.
+8. The return URL (`callback_url`) comes from the frontend as `redirect_url` on enrol, and is allowlisted by host in Main before it reaches Payment, so a genuine Paystack page can't be used as an open redirect.
 
 ### 7.4 Reconciliation
 
-Webhooks can be missed — network blips, a deploy mid-flight. A nightly reconciliation job calls each active provider's list-transactions API and diffs the result against the local `payments` table by `(provider_id, provider_reference)`, flagging any row where the provider shows a final state but the local row is still `'processing'`. This is the safety net underneath the webhook flow, not a replacement for it.
+Webhooks can be missed — network blips, a deploy mid-flight. Two safety nets sit underneath the webhook flow, not replacing it:
+
+- **On return.** When the payer comes back, Main's `verify-payment` asks Payment (`GET /internal/checkouts/{id}`), which re-verifies with the provider while the payment is `processing` or `failed`.
+- **On a schedule.** `payments:reconcile` (every 15 minutes) re-verifies each `processing`/`failed` payment created between 48 hours and 10 minutes ago, oldest first, at most 200 per run, one provider error never stopping the run. It goes through the same `settle()`, so anything it settles is published exactly as a webhook would be. Payments flagged `amount_mismatch`, and checkouts that never initialized, are skipped. Abandoned checkouts simply stay `processing` once they age out: Paystack never finalizes them, and marking them failed would risk refusing a late payment.
+
+The original plan, a nightly diff against the provider's list-transactions API, is still worth adding for payments Main never knew about. It's not built.
 
 ### 7.5 Provider abstraction
 
