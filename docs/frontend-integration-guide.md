@@ -873,10 +873,21 @@ names as `lib/classes.ts`. Times are Lagos (`+01:00`), money is
 | `GET /classes/{id}` | Same item plus `sessions[]`. Drafts 404; a cancelled class only shows to families who were in it (with `cancellation_reason`). |
 | `GET /classes/{id}/sessions` | Class days: `{ id, day, date, starts_at, ends_at, status (upcoming/live/completed), meeting_url }`. `meeting_url` is **null unless you hold a confirmed seat and it's within 60 min of the start until the end** (admins and the class teacher always see it). Your Join button's 10-minute rule stays as is. |
 | `GET /classes/sessions?from=YYYY-MM-DD&to=YYYY-MM-DD` | The week strip and schedule: class days across all classes in the range (≤ 62 days), each with `class { id, title, subject, art, total_days }`. |
-| `POST /classes/{id}/enrolments` `{ learner_id }` (`/enrollments` also works) | Parent (own child) or independent student (self), otherwise 403. **Paid:** `201`, `status: "pending_payment"`, `checkout_url` (send the user there), `hold_expires_at` (seat held 30 min). A retry returns the same enrolment (`200`). **Free:** `201`, `status: "confirmed"`. Allowed until the last class day ends, so the user can join a running class. |
-| `POST /class-enrollments/{id}/verify-payment` | Call when Paystack redirects back to `/classes/{classId}/enrollments/{enrollmentId}/complete`; returns `confirmed` once paid. Safe to poll. |
+| `POST /classes/{id}/enrolments` `{ learner_id, redirect_url? }` (`/enrollments` also works) | Parent (own child) or independent student (self), otherwise 403. **Paid:** `201`, `status: "pending_payment"`, `checkout_url` (send the user there), `payment_reference`, `hold_expires_at` (seat held 30 min). A retry returns the same enrolment (`200`) and the same checkout. **Free:** `201`, `status: "confirmed"`. Allowed until the last class day ends, so the user can join a running class. `redirect_url` is where Paystack sends the payer afterwards (default `/classes/{classId}/enrollments/{enrollmentId}/complete`); it must be `https` on `FRONTEND_URL`'s host or one in `CHECKOUT_REDIRECT_HOSTS` (plus `http://localhost` outside production), no port, credentials or `#fragment`, else `422`. Only the first checkout uses it. Paystack appends `?trxref=…&reference=…`. |
+| `POST /class-enrollments/{id}/verify-payment` | Call on the return page when you know the enrolment id. Safe to poll. |
+| `POST /class-enrollments/verify-payment` `{ reference }` (or `{ trxref }`) | The same, by the `reference` Paystack put on your return URL. `404` for an unknown reference or someone else's. |
 | `GET /class-enrollments`, `GET /class-enrollments/{id}` | Your enrolments (a child login sees its own). |
 | `POST /classes/{id}/rating` `{ rating: 1-5, comment? }` | Payer with a confirmed seat, once a class day has finished. Rating again replaces your rating. Returns `{ rating_avg, rating_count }`. |
+
+Both verify calls return the enrolment as `data` plus
+`verification: { payment_status, enrolled, reference, channel, paid_at }`.
+`payment_status` is `paid` / `pending` (still on Paystack, or not settled
+yet: poll a few times, then let the webhook finish it) / `failed` (declined;
+the payer can retry on the same `checkout_url` while the hold lasts) /
+`not_required` (free). **Branch on `enrolled`, not `payment_status`**: money
+can land for a class cancelled meanwhile (`paid`, `enrolled: false`, support
+follows up). `409 payment_mismatch` means the payment wasn't for this
+enrolment; nothing was confirmed, send them to support.
 
 Errors: `409 class_full`, `409 class_not_open`, `409 already_enrolled`,
 `409 class_not_rateable_yet`, `503 payment_unavailable` (nothing charged,

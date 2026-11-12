@@ -17,6 +17,12 @@ interface ClassEnrollmentRepositoryInterface
 
     public function findByPublicId(string $publicId): ?ClassEnrollment;
 
+    /** By Payment's payment id, or the provider's reference (the `?reference=` Paystack returns with). */
+    public function findByPaymentReference(string $reference): ?ClassEnrollment;
+
+    /** Walks every enrolment that has a Payment-service payment, in id order, $size at a time. */
+    public function eachWithPayment(callable $callback, int $size = 200): void;
+
     /** The learner's pending or confirmed enrolment in this class, if any. */
     public function activeFor(TewtoraClass $class, int $learnerProfileId): ?ClassEnrollment;
 

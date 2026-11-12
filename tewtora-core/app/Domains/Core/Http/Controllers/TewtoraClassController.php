@@ -94,7 +94,7 @@ class TewtoraClassController
             abort(403, 'You can only enrol your own learner profile, and only a parent or independent student can pay.');
         }
 
-        $enrollment = $this->enrollments->enroll($class, $learner, $request->user());
+        $enrollment = $this->enrollments->enroll($class, $learner, $request->user(), $request->validated('redirect_url'));
 
         return (new ClassEnrollmentResource($enrollment->load('tewtoraClass'), $learner))
             ->response()

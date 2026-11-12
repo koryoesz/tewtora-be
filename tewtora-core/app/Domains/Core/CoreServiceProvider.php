@@ -24,6 +24,7 @@ use App\Domains\Core\Repositories\EloquentFeedbackRepository;
 use App\Domains\Core\Repositories\EloquentMessageRepository;
 use App\Domains\Core\Repositories\EloquentMessageThreadRepository;
 use App\Domains\Core\Repositories\EloquentMoveRequestRepository;
+use App\Domains\Core\Repositories\EloquentPaymentViewRepository;
 use App\Domains\Core\Repositories\EloquentPlanRepository;
 use App\Domains\Core\Repositories\EloquentPricingSettingRepository;
 use App\Domains\Core\Repositories\EloquentSessionRepository;
@@ -33,6 +34,7 @@ use App\Domains\Core\Repositories\FeedbackRepositoryInterface;
 use App\Domains\Core\Repositories\MessageRepositoryInterface;
 use App\Domains\Core\Repositories\MessageThreadRepositoryInterface;
 use App\Domains\Core\Repositories\MoveRequestRepositoryInterface;
+use App\Domains\Core\Repositories\PaymentViewRepositoryInterface;
 use App\Domains\Core\Repositories\PlanRepositoryInterface;
 use App\Domains\Core\Repositories\PricingSettingRepositoryInterface;
 use App\Domains\Core\Repositories\SessionRepositoryInterface;
@@ -57,6 +59,7 @@ class CoreServiceProvider extends ServiceProvider
         $this->app->bind(PricingSettingRepositoryInterface::class, EloquentPricingSettingRepository::class);
         $this->app->bind(TewtoraClassRepositoryInterface::class, EloquentTewtoraClassRepository::class);
         $this->app->bind(ClassEnrollmentRepositoryInterface::class, EloquentClassEnrollmentRepository::class);
+        $this->app->bind(PaymentViewRepositoryInterface::class, EloquentPaymentViewRepository::class);
         $this->app->bind(PaymentServiceClient::class, HttpPaymentServiceClient::class);
     }
 

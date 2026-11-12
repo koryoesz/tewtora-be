@@ -44,6 +44,8 @@ class ClassEnrollmentResource extends JsonResource
             'amount_minor' => $this->amount_minor,
             'currency_code' => $this->currency_code,
             'is_free' => $this->amount_minor === 0,
+            // Shown on receipts; also what Paystack's return URL carries as ?reference=.
+            'payment_reference' => $this->provider_reference ?? $this->payment_id,
             'checkout_url' => $this->when($pendingLive, $this->checkout_url),
             'hold_expires_at' => $this->when($pendingLive, fn () => $this->hold_expires_at->toIso8601ZuluString()),
             'paid_at' => $this->paid_at?->toIso8601ZuluString(),

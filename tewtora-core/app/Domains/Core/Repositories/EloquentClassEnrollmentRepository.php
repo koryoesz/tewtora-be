@@ -33,6 +33,20 @@ class EloquentClassEnrollmentRepository implements ClassEnrollmentRepositoryInte
         return ClassEnrollment::where('public_id', $publicId)->first();
     }
 
+    public function findByPaymentReference(string $reference): ?ClassEnrollment
+    {
+        // payment_id is uniquely indexed and is what Core sends Paystack as the
+        // reference, so it almost always hits; provider_reference covers a
+        // provider that assigns its own.
+        return ClassEnrollment::where('payment_id', $reference)->first()
+            ?? ClassEnrollment::where('provider_reference', $reference)->first();
+    }
+
+    public function eachWithPayment(callable $callback, int $size = 200): void
+    {
+        ClassEnrollment::whereNotNull('payment_id')->with('tewtoraClass')->lazyById($size)->each($callback);
+    }
+
     public function activeFor(TewtoraClass $class, int $learnerProfileId): ?ClassEnrollment
     {
         return ClassEnrollment::where('tewtora_class_id', $class->id)

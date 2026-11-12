@@ -2,6 +2,7 @@
 
 namespace App\Domains\Auth\Services;
 
+use App\Domains\Auth\Contracts\AccountRef;
 use App\Domains\Auth\Contracts\AuthDirectory;
 use App\Domains\Auth\Contracts\CurriculumRef;
 use App\Domains\Auth\Contracts\LearnerRef;
@@ -44,6 +45,28 @@ class EloquentAuthDirectory implements AuthDirectory
         return LearnerProfile::withoutGlobalScopes()
             ->where(fn ($q) => $q->where('owner_account_id', $accountId)->orWhere('linked_login_account_id', $accountId))
             ->pluck('id')->map(fn ($id) => (int) $id)->all();
+    }
+
+    public function accountsByIds(array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+
+        $ownNames = LearnerProfile::withoutGlobalScopes()
+            ->whereIn('owner_account_id', array_unique($ids))
+            ->where('profile_type', 'own')
+            ->pluck('full_name', 'owner_account_id');
+
+        // Deleted accounts too: their payments still happened.
+        return Account::withoutGlobalScopes()->whereIn('id', array_unique($ids))->get()
+            ->mapWithKeys(fn (Account $a) => [$a->id => new AccountRef(
+                (int) $a->id,
+                (string) $a->public_id,
+                $a->email,
+                $ownNames[$a->id] ?? null,
+            )])
+            ->all();
     }
 
     public function accountEmail(int $accountId): ?string

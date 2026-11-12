@@ -66,9 +66,9 @@ class CheckoutHttpTest extends TestCase
         ], $overrides);
     }
 
-    private function startCheckout(): Payment
+    private function startCheckout(array $overrides = []): Payment
     {
-        $id = $this->internal()->postJson('/api/v1/internal/checkouts', $this->checkoutBody())->assertCreated()->json('data.payment_id');
+        $id = $this->internal()->postJson('/api/v1/internal/checkouts', $this->checkoutBody($overrides))->assertCreated()->json('data.payment_id');
 
         return Payment::where('public_id', $id)->sole();
     }
@@ -172,6 +172,40 @@ class CheckoutHttpTest extends TestCase
         Http::assertSentCount(2); // initialize + one verify; the second status read is local
     }
 
+    public function test_status_tells_core_what_the_payment_was_for(): void
+    {
+        $payment = $this->startCheckout();
+
+        $this->internal()->getJson("/api/v1/internal/checkouts/{$payment->public_id}")
+            ->assertJsonPath('data.purpose', 'class_enrollment')
+            ->assertJsonPath('data.purpose_ref', 'enrollment-uuid-1')
+            ->assertJsonPath('data.channel', 'card');
+    }
+
+    /** The payer's "I've paid" after a declined card and a retry on the same Paystack page. */
+    public function test_status_reverifies_a_failed_payment_and_lets_success_win(): void
+    {
+        $payment = $this->startCheckout();
+        $this->fakePaystack(verify: ['status' => 'failed', 'gateway_response' => 'Declined']);
+        $this->internal()->getJson("/api/v1/internal/checkouts/{$payment->public_id}")->assertJsonPath('data.status', 'failed');
+
+        $this->fakePaystack();
+        $this->internal()->getJson("/api/v1/internal/checkouts/{$payment->public_id}")->assertJsonPath('data.status', 'success');
+
+        $this->assertNull($payment->fresh()->failure_reason);
+        $this->assertSame(['PaymentFailed', 'PaymentSucceeded'], OutboxEvent::orderBy('id')->pluck('event_type')->all());
+    }
+
+    public function test_status_never_reverifies_a_checkout_that_never_started(): void
+    {
+        $this->fakePaystack(initializeStatus: 401);
+        $this->internal()->postJson('/api/v1/internal/checkouts', $this->checkoutBody())->assertStatus(502);
+        $this->fakePaystack();
+
+        $this->internal()->getJson('/api/v1/internal/checkouts/'.Payment::sole()->public_id)->assertJsonPath('data.status', 'failed');
+        Http::assertNothingSent();
+    }
+
     public function test_status_leaves_an_abandoned_checkout_processing(): void
     {
         $payment = $this->startCheckout();
@@ -214,6 +248,7 @@ class CheckoutHttpTest extends TestCase
             'amount_minor' => 2500000,
             'currency_code' => 'NGN',
             'provider_reference' => $payment->provider_reference,
+            'channel' => 'bank_transfer',
             'paid_at' => '2026-11-07T10:00:00Z',
         ], $event->payload);
         $this->assertNull($event->published_at);
@@ -237,6 +272,7 @@ class CheckoutHttpTest extends TestCase
         $this->webhook($this->chargeSuccess($payment, ['amount' => 100]))->assertOk();
 
         $this->assertSame('processing', $payment->fresh()->status);
+        $this->assertSame('amount_mismatch', $payment->fresh()->failure_reason, 'flagged for a human');
         $this->assertSame(0, OutboxEvent::count());
     }
 
@@ -249,6 +285,74 @@ class CheckoutHttpTest extends TestCase
         $this->assertSame('failed', $payment->fresh()->status);
         $this->assertSame('Declined', $payment->fresh()->failure_reason);
         $this->assertSame(1, OutboxEvent::where('event_type', 'PaymentFailed')->count());
+    }
+
+    /** Money taken must always reach Core: a declined first attempt is not final. */
+    public function test_a_success_webhook_after_a_failure_still_settles_as_success(): void
+    {
+        $payment = $this->startCheckout();
+
+        $this->webhook(['event' => 'charge.failed', 'data' => ['reference' => $payment->provider_reference, 'status' => 'failed', 'amount' => 2500000, 'currency' => 'NGN', 'gateway_response' => 'Declined']])->assertOk();
+        $this->webhook($this->chargeSuccess($payment))->assertOk();
+
+        $this->assertSame('success', $payment->fresh()->status);
+        $this->assertSame(['PaymentFailed', 'PaymentSucceeded'], OutboxEvent::orderBy('id')->pluck('event_type')->all());
+    }
+
+    public function test_a_late_failure_never_undoes_a_success(): void
+    {
+        $payment = $this->startCheckout();
+
+        $this->webhook($this->chargeSuccess($payment))->assertOk();
+        $this->webhook(['event' => 'charge.failed', 'data' => ['reference' => $payment->provider_reference, 'status' => 'failed', 'amount' => 2500000, 'currency' => 'NGN']])->assertOk();
+
+        $this->assertSame('success', $payment->fresh()->status);
+        $this->assertSame(1, OutboxEvent::count());
+    }
+
+    // --- reconciliation (§7.4) ----------------------------------------------
+
+    public function test_reconcile_settles_missed_webhooks_and_leaves_the_rest_alone(): void
+    {
+        $missed = $this->startCheckout();
+        $tooNew = $this->startCheckout(['purpose_ref' => 'enrollment-uuid-2']);
+        $tooOld = $this->startCheckout(['purpose_ref' => 'enrollment-uuid-3']);
+        $mismatch = $this->startCheckout(['purpose_ref' => 'enrollment-uuid-4']);
+        $settled = $this->startCheckout(['purpose_ref' => 'enrollment-uuid-5']);
+
+        $missed->forceFill(['created_at' => now()->subMinutes(30)])->save();
+        $tooOld->forceFill(['created_at' => now()->subDays(3)])->save();
+        $mismatch->forceFill(['created_at' => now()->subMinutes(30), 'failure_reason' => 'amount_mismatch'])->save();
+        $settled->forceFill(['created_at' => now()->subMinutes(30), 'status' => 'success', 'paid_at' => now()])->save();
+
+        $this->fakePaystack();
+        $this->artisan('payments:reconcile')->expectsOutputToContain('Checked 1, settled 1, errors 0')->assertSuccessful();
+
+        $this->assertSame('success', $missed->fresh()->status);
+        $this->assertSame('processing', $tooNew->fresh()->status);
+        $this->assertSame('processing', $tooOld->fresh()->status);
+        $this->assertSame('processing', $mismatch->fresh()->status);
+        $this->assertSame(1, OutboxEvent::where('event_type', 'PaymentSucceeded')->count());
+        Http::assertSentCount(1);
+    }
+
+    public function test_reconcile_carries_on_past_a_provider_error(): void
+    {
+        $a = $this->startCheckout();
+        $b = $this->startCheckout(['purpose_ref' => 'enrollment-uuid-2']);
+        Payment::query()->update(['created_at' => now()->subHour()]);
+
+        Http::swap(new Factory);
+        Http::fake([
+            "api.paystack.test/transaction/verify/{$a->public_id}" => Http::response(['status' => false, 'message' => 'boom'], 500),
+            'api.paystack.test/transaction/verify/*' => Http::response(['status' => true, 'data' => [
+                'reference' => $b->public_id, 'status' => 'success', 'amount' => 2500000, 'currency' => 'NGN', 'channel' => 'card',
+            ]]),
+        ]);
+
+        $this->artisan('payments:reconcile')->expectsOutputToContain('Checked 2, settled 1, errors 1')->assertSuccessful();
+        $this->assertSame('processing', $a->fresh()->status);
+        $this->assertSame('success', $b->fresh()->status);
     }
 
     public function test_unknown_references_and_other_events_are_acknowledged_and_ignored(): void

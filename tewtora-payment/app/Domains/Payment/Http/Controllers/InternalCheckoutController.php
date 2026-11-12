@@ -37,7 +37,7 @@ class InternalCheckoutController
         return response()->json(['data' => $this->present($payment)], $payment->wasRecentlyCreated ? 201 : 200);
     }
 
-    /** Re-verifies with the provider while the payment is still `processing`. */
+    /** Re-verifies with the provider while the payment's outcome can still change (processing, or failed). */
     public function show(Payment $payment)
     {
         return response()->json(['data' => $this->present($this->checkouts->refresh($payment))]);
@@ -47,11 +47,14 @@ class InternalCheckoutController
     {
         return [
             'payment_id' => $payment->public_id,
+            'purpose' => $payment->purpose,
+            'purpose_ref' => $payment->purpose_ref,
             'status' => $payment->status,
             'checkout_url' => $payment->status === 'processing' ? $payment->checkout_url : null,
             'provider_reference' => $payment->provider_reference,
             'amount_minor' => $payment->amount_minor,
             'currency_code' => $payment->currency_code,
+            'channel' => $payment->channel,
             'paid_at' => $payment->paid_at?->toIso8601ZuluString(),
         ];
     }

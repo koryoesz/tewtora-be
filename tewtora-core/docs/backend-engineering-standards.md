@@ -96,6 +96,7 @@ Domain exceptions, one per business rule that can realistically fail — pulled 
 | `ClassNotPublishableException` | Core | Publishing without a class day that's still to come |
 | `ClassNotRateableYetException` | Core | Rating a class before any of its days has finished |
 | `PaymentServiceUnavailableException` | Core | Core can't start/check a checkout with the Payment service |
+| `PaymentDoesNotMatchEnrollmentException` | Core | Verifying a class payment that Payment says was for another purpose, enrolment or checkout (`409 payment_mismatch`) |
 
 A single `Shared/Exceptions/Handler.php` (extending Laravel's) catches `AppException` and renders the standard error envelope (section 6) — domain code just throws, it never formats HTTP responses itself.
 

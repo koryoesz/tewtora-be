@@ -1,5 +1,6 @@
 <?php
 
+use App\Domains\Core\Http\Controllers\AdminPaymentController;
 use App\Domains\Core\Http\Controllers\AdminTewtoraClassController;
 use App\Domains\Core\Http\Controllers\ClassEnrollmentController;
 use App\Domains\Core\Http\Controllers\FeedbackController;
@@ -79,6 +80,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/classes/{class:public_id}/enrolments', [TewtoraClassController::class, 'enroll'])->middleware('throttle:20,1');
     Route::post('/classes/{class:public_id}/enrollments', [TewtoraClassController::class, 'enroll'])->middleware('throttle:20,1');
     Route::get('/class-enrollments', [ClassEnrollmentController::class, 'index']);
+    // By Paystack's ?reference= on the return page; must stay above /class-enrollments/{enrollment}.
+    Route::post('/class-enrollments/verify-payment', [ClassEnrollmentController::class, 'verifyPaymentByReference'])->middleware('throttle:30,1');
     Route::get('/class-enrollments/{enrollment:public_id}', [ClassEnrollmentController::class, 'show']);
     Route::post('/class-enrollments/{enrollment:public_id}/verify-payment', [ClassEnrollmentController::class, 'verifyPayment'])->middleware('throttle:30,1');
 });
@@ -95,4 +98,8 @@ Route::prefix('internal')->middleware(['auth:sanctum', 'admin'])->group(function
     Route::post('/classes/{class:public_id}/image', [AdminTewtoraClassController::class, 'uploadImage']);
     Route::delete('/classes/{class:public_id}/image', [AdminTewtoraClassController::class, 'deleteImage']);
     Route::get('/classes/{class:public_id}/enrollments', [AdminTewtoraClassController::class, 'roster']);
+
+    // Staff Payments page — tewtora-fe docs/needed-endpoints-admin-payments.md.
+    Route::get('/payments', [AdminPaymentController::class, 'index']);
+    Route::get('/payments/summary', [AdminPaymentController::class, 'summary']);
 });

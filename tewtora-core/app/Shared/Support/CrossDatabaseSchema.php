@@ -49,6 +49,15 @@ class CrossDatabaseSchema
         ) !== null;
     }
 
+    /** Any index, including plain (non-unique) KEYs, which table_constraints doesn't list. */
+    public static function indexExists(string $schema, string $table, string $index): bool
+    {
+        return DB::selectOne(
+            'SELECT 1 FROM information_schema.statistics WHERE table_schema = ? AND table_name = ? AND index_name = ? LIMIT 1',
+            [$schema, $table, $index],
+        ) !== null;
+    }
+
     /** Covers CHECK, UNIQUE, FOREIGN KEY, etc. — any named table constraint. */
     public static function constraintExists(string $schema, string $table, string $constraint): bool
     {

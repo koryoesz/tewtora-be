@@ -12,5 +12,10 @@ return [
     // Enrolled families get a day's meeting_url from this many minutes
     // before it starts until it ends (the frontend's Join button itself
     // opens 10 minutes before). Admins and the class teacher always see it.
+    // Hosts the frontend may send as `redirect_url` on enrol, for where
+    // Paystack returns the payer (AllowedCheckoutRedirect). FRONTEND_URL's
+    // host is always allowed. Comma-separated, exact hosts.
+    'checkout_redirect_hosts' => array_filter(explode(',', (string) env('CHECKOUT_REDIRECT_HOSTS', ''))),
+
     'meeting_link_reveal_minutes' => (int) env('CLASS_LINK_REVEAL_MINUTES', 60),
 ];

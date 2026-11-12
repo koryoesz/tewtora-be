@@ -12,3 +12,7 @@ Artisan::command('inspire', function () {
 // enrolments (it also confirms immediately via /internal/checkouts/{id} when
 // the payer returns from Paystack; this is the path for everyone else).
 Schedule::command('outbox:relay')->everyMinute()->withoutOverlapping();
+
+// §7.4: catch payments whose webhook never arrived (and whose payer never
+// came back to trigger a verify). Each settled one publishes like a webhook.
+Schedule::command('payments:reconcile')->everyFifteenMinutes()->withoutOverlapping();

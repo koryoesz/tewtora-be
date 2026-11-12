@@ -7,6 +7,7 @@ use App\Domains\Core\Models\TewtoraClass;
 use App\Domains\Core\Models\TewtoraClassSession;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\Factory;
+use Illuminate\Http\Client\Request as HttpRequest;
 use Illuminate\Support\Facades\Http;
 
 /** Fixtures for Tewtora classes. Use with SeedsAuthGraph. */
@@ -78,13 +79,21 @@ trait SeedsClasses
                 'checkout_url' => 'https://checkout.paystack.test/abc123',
                 'provider_reference' => 'ref-123',
             ], $checkout)], 201),
-            'payment.test/api/v1/internal/checkouts/*' => Http::response(['data' => array_merge([
-                'payment_id' => 'pay-1',
-                'status' => 'success',
-                'amount_minor' => 2500000,
-                'currency_code' => 'NGN',
-                'provider_reference' => 'ref-123',
-            ], $status)]),
+            // Like Payment: echoes the payment id it was asked about, and what
+            // that payment was for (the enrolment that started it).
+            'payment.test/api/v1/internal/checkouts/*' => function (HttpRequest $request) use ($status) {
+                $paymentId = rawurldecode(basename(parse_url($request->url(), PHP_URL_PATH)));
+
+                return Http::response(['data' => array_merge([
+                    'payment_id' => $paymentId,
+                    'purpose' => 'class_enrollment',
+                    'purpose_ref' => ClassEnrollment::where('payment_id', $paymentId)->value('public_id'),
+                    'status' => 'success',
+                    'amount_minor' => 2500000,
+                    'currency_code' => 'NGN',
+                    'provider_reference' => 'ref-123',
+                ], $status)]);
+            },
         ]);
     }
 

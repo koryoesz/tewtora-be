@@ -3,6 +3,7 @@
 namespace App\Domains\Core\Services\Payments;
 
 use App\Domains\Core\Exceptions\PaymentServiceUnavailableException;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
@@ -53,6 +54,10 @@ class HttpPaymentServiceClient implements PaymentServiceClient
             (int) $data['amount_minor'],
             $data['currency_code'],
             $data['provider_reference'] ?? null,
+            $data['channel'] ?? null,
+            isset($data['paid_at']) ? CarbonImmutable::parse($data['paid_at']) : null,
+            $data['purpose'] ?? null,
+            $data['purpose_ref'] ?? null,
         );
     }
 

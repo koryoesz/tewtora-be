@@ -137,8 +137,8 @@ CREATE TABLE outbox_events (
 | `TeacherRegistered` | Auth | Main, Recommendation | teacher_id, public_id, account_id, verification_status | ≥ once |
 | `TeacherVerified` | Auth | Recommendation | teacher_id, verification_status, subjects, curricula | ≥ once |
 | `MatchAccepted` | Recommendation | Main | match_id, learner_profile_id, teacher_id | sync call |
-| `PaymentSucceeded` | Payment | Main | payment_id, purpose, purpose_ref, amount_minor, currency_code, provider_reference, paid_at | ≥ once |
-| `PaymentFailed` | Payment | Main | payment_id, session_id, provider_reference, failure_reason | ≥ once |
+| `PaymentSucceeded` | Payment | Main | payment_id, purpose, purpose_ref, amount_minor, currency_code, provider_reference, channel, paid_at | ≥ once |
+| `PaymentFailed` | Payment | Main | payment_id, purpose, purpose_ref, amount_minor, currency_code, provider_reference, channel, paid_at (null) | ≥ once |
 | `SessionCompleted` | Main | Payment | session_id, teacher_id, scheduled_at | ≥ once |
 | `SessionFeedbackFiled` | Main | Payment | session_id, feedback_id | ≥ once |
 
@@ -240,11 +240,19 @@ ALTER TABLE payments
 2. The provider processes the charge and calls back to `POST /webhooks/{provider}`.
 3. Payment service verifies the webhook signature (provider-specific HMAC secret, retrieved via `webhook_secret_ref`) before trusting the payload — an unverified webhook is not evidence of anything.
 4. Payment service looks up the `payments` row by `(provider_id, provider_reference)`, updates status, and writes an outbox event: `PaymentSucceeded` or `PaymentFailed`.
-5. If the same `provider_reference` arrives twice (a provider retry, which will happen), the unique index plus an idempotent update (only transition from `'processing'`, never re-apply to an already-`'success'` row) prevents double-processing.
+5. If the same `provider_reference` arrives twice (a provider retry, which will happen), the unique index plus an idempotent update prevents double-processing. Allowed transitions: `processing → success | failed`, and `failed → success`; `success` is final. A failure is deliberately *not* final: a declined card followed by a retry on the same Paystack checkout succeeds on the same reference, and that money must still reach Main (a second `PaymentSucceeded` after the `PaymentFailed`). A stale failure after a success is a no-op.
+6. A success for an amount/currency other than the one we initialized never settles; it's logged as critical and flagged (`failure_reason = 'amount_mismatch'`) for a human.
+7. Main also checks, before confirming anything, that Payment's record of the payment names *its* enrolment (`purpose` + `purpose_ref`, and the checkout's own `payment_id`). A payment can never buy a seat it wasn't made for.
+8. The return URL (`callback_url`) comes from the frontend as `redirect_url` on enrol, and is allowlisted by host in Main before it reaches Payment, so a genuine Paystack page can't be used as an open redirect.
 
 ### 7.4 Reconciliation
 
-Webhooks can be missed — network blips, a deploy mid-flight. A nightly reconciliation job calls each active provider's list-transactions API and diffs the result against the local `payments` table by `(provider_id, provider_reference)`, flagging any row where the provider shows a final state but the local row is still `'processing'`. This is the safety net underneath the webhook flow, not a replacement for it.
+Webhooks can be missed — network blips, a deploy mid-flight. Two safety nets sit underneath the webhook flow, not replacing it:
+
+- **On return.** When the payer comes back, Main's `verify-payment` asks Payment (`GET /internal/checkouts/{id}`), which re-verifies with the provider while the payment is `processing` or `failed`.
+- **On a schedule.** `payments:reconcile` (every 15 minutes) re-verifies each `processing`/`failed` payment created between 48 hours and 10 minutes ago, oldest first, at most 200 per run, one provider error never stopping the run. It goes through the same `settle()`, so anything it settles is published exactly as a webhook would be. Payments flagged `amount_mismatch`, and checkouts that never initialized, are skipped. Abandoned checkouts simply stay `processing` once they age out: Paystack never finalizes them, and marking them failed would risk refusing a late payment.
+
+The original plan, a nightly diff against the provider's list-transactions API, is still worth adding for payments Main never knew about. It's not built.
 
 ### 7.5 Provider abstraction
 

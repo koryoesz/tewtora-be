@@ -27,6 +27,9 @@ interface AuthDirectory
      */
     public function learnerIdsVisibleTo(int $accountId): array;
 
+    /** @param  list<int>  $ids  @return array<int, AccountRef> keyed by account id */
+    public function accountsByIds(array $ids): array;
+
     /** For notifying an account by email — null if it has none (a child login) or doesn't exist. */
     public function accountEmail(int $accountId): ?string;
 
