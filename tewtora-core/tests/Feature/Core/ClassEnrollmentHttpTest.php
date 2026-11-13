@@ -403,6 +403,49 @@ class ClassEnrollmentHttpTest extends TestCase
         $this->as($this->tokenFor($childLogin))->getJson('/api/v1/class-enrollments')->assertOk()->assertJsonCount(1, 'data');
     }
 
+    // --- per-child seats for the plans page ---------------------------------------
+
+    public function test_a_childs_class_seats_list_only_seats_that_count_with_their_schedule(): void
+    {
+        [$parent, $child, $token] = $this->family();
+        $sibling = $this->makeLearnerProfile(['owner_account_id' => $parent->id, 'profile_type' => 'child']);
+        $running = $this->makeClass(['title' => 'Running'], days: 4, firstDayInDays: -8);
+        $pay = ['learner_profile_id' => $child->id, 'payer_account_id' => $parent->id];
+
+        $confirmed = $this->makeEnrollment($running, $pay);
+        $held = $this->makeEnrollment($this->makeClass(['title' => 'Held']), $pay + ['status' => ClassEnrollment::STATUS_PENDING, 'confirmed_at' => null, 'hold_expires_at' => now()->addMinutes(20)]);
+        $this->makeEnrollment($this->makeClass(), $pay + ['status' => ClassEnrollment::STATUS_PENDING, 'confirmed_at' => null, 'hold_expires_at' => now()->subMinute()]);
+        $this->makeEnrollment($this->makeClass(), $pay + ['status' => ClassEnrollment::STATUS_EXPIRED, 'confirmed_at' => null]);
+        $this->makeEnrollment($this->makeClass(), $pay + ['status' => ClassEnrollment::STATUS_CANCELLED]);
+        $this->makeEnrollment($this->makeClass(), ['learner_profile_id' => $sibling->id, 'payer_account_id' => $parent->id]);
+
+        $data = $this->as($token)->getJson("/api/v1/learners/{$child->public_id}/class-enrollments")
+            ->assertOk()->assertJsonCount(2, 'data')->json('data');
+
+        $this->assertEqualsCanonicalizing([$confirmed->public_id, $held->public_id], array_column($data, 'id'));
+        $row = collect($data)->firstWhere('id', $confirmed->public_id);
+        $this->assertSame($child->public_id, $row['learner']['id']);
+        $this->assertSame(4, $row['class']['total_days']);
+        $this->assertSame(2, $row['class']['days_done']);
+        $this->assertSame(3, $row['class']['next_day']['day']);
+        $this->assertSame('16:00', $row['class']['starts_at_time']);
+        $this->assertCount(1, $row['class']['days']);
+    }
+
+    public function test_only_the_owner_or_the_childs_own_login_can_list_a_childs_seats(): void
+    {
+        [$parent, $child] = $this->family();
+        $this->makeEnrollment($this->makeClass(), ['learner_profile_id' => $child->id, 'payer_account_id' => $parent->id]);
+        $childLogin = $this->makeAccount(['account_type' => 'child', 'email' => null, 'username' => 'kid'.uniqid()]);
+        $child->update(['linked_login_account_id' => $childLogin->id]);
+        [, , $strangerToken] = $this->family();
+
+        $url = "/api/v1/learners/{$child->public_id}/class-enrollments";
+        $this->as($this->tokenFor($childLogin))->getJson($url)->assertOk()->assertJsonCount(1, 'data');
+        $this->as($strangerToken)->getJson($url)->assertForbidden();
+        $this->as($strangerToken)->getJson('/api/v1/learners/'.fake()->uuid().'/class-enrollments')->assertNotFound();
+    }
+
     // --- ratings ----------------------------------------------------------------
 
     public function test_a_paying_family_rates_once_a_day_has_finished_and_the_average_updates(): void

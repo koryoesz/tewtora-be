@@ -96,7 +96,7 @@ class TewtoraClassController
 
         $enrollment = $this->enrollments->enroll($class, $learner, $request->user(), $request->validated('redirect_url'));
 
-        return (new ClassEnrollmentResource($enrollment->load('tewtoraClass'), $learner))
+        return (new ClassEnrollmentResource($enrollment->load('tewtoraClass.sessions'), $learner))
             ->response()
             ->setStatusCode($enrollment->wasRecentlyCreated ? 201 : 200);
     }

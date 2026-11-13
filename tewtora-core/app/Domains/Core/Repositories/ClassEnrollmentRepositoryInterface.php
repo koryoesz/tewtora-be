@@ -48,6 +48,12 @@ interface ClassEnrollmentRepositoryInterface
      */
     public function visibleTo(int $accountId, array $learnerIds): Collection;
 
+    /**
+     * One learner's seats, for the plans page: confirmed, plus pending ones
+     * whose hold hasn't run out. Newest first, with each class's days loaded.
+     */
+    public function seatsHeldBy(int $learnerProfileId): Collection;
+
     public function hasConfirmedFor(TewtoraClass $class, array $learnerIds, int $payerAccountId): bool;
 
     public function existsFor(TewtoraClass $class): bool;

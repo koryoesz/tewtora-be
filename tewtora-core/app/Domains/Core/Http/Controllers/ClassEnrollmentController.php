@@ -32,6 +32,22 @@ class ClassEnrollmentController
         ]);
     }
 
+    /**
+     * GET /learners/{id}/class-enrollments — one child's class seats, for the
+     * plans page next to GET /learners/{id}/plans. Only seats that count
+     * (confirmed, or pending with a live hold). The owner or the child's own
+     * login only, like the plans list.
+     */
+    public function forLearner(Request $request, string $learnerPublicId)
+    {
+        $learner = $this->auth->learner($learnerPublicId) ?? abort(404);
+        in_array($learner->id, $this->auth->learnerIdsVisibleTo($request->user()->id), true) || abort(403);
+
+        return response()->json([
+            'data' => $this->enrollments->seatsHeldBy($learner->id)->map(fn ($e) => new ClassEnrollmentResource($e, $learner)),
+        ]);
+    }
+
     public function show(Request $request, ClassEnrollment $enrollment)
     {
         $request->user()->can('view', $enrollment) || abort(404);

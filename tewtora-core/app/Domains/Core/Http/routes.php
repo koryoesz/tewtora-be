@@ -80,6 +80,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/classes/{class:public_id}/enrolments', [TewtoraClassController::class, 'enroll'])->middleware('throttle:20,1');
     Route::post('/classes/{class:public_id}/enrollments', [TewtoraClassController::class, 'enroll'])->middleware('throttle:20,1');
     Route::get('/class-enrollments', [ClassEnrollmentController::class, 'index']);
+    Route::get('/learners/{learnerPublicId}/class-enrollments', [ClassEnrollmentController::class, 'forLearner']);
     // By Paystack's ?reference= on the return page; must stay above /class-enrollments/{enrollment}.
     Route::post('/class-enrollments/verify-payment', [ClassEnrollmentController::class, 'verifyPaymentByReference'])->middleware('throttle:30,1');
     Route::get('/class-enrollments/{enrollment:public_id}', [ClassEnrollmentController::class, 'show']);
