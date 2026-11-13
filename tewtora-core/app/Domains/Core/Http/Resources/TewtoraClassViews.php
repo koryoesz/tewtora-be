@@ -76,7 +76,7 @@ class TewtoraClassViews
     /** Who holds a seat (confirmed, or pending payment) — for admins and the class teacher. */
     public function roster(TewtoraClass $class): array
     {
-        $enrollments = $this->enrollments->active($class)->load('tewtoraClass');
+        $enrollments = $this->enrollments->active($class)->load('tewtoraClass.sessions');
         $learners = $this->auth->learnersByIds($enrollments->pluck('learner_profile_id')->all());
 
         return $enrollments->map(fn ($e) => new ClassEnrollmentResource($e, $learners[$e->learner_profile_id] ?? null))->all();

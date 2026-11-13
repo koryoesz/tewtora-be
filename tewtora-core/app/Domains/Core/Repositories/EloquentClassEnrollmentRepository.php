@@ -100,6 +100,16 @@ class EloquentClassEnrollmentRepository implements ClassEnrollmentRepositoryInte
             ->get();
     }
 
+    public function seatsHeldBy(int $learnerProfileId): Collection
+    {
+        return ClassEnrollment::where('learner_profile_id', $learnerProfileId)
+            ->where(fn (Builder $q) => $q->where('status', ClassEnrollment::STATUS_CONFIRMED)
+                ->orWhere(fn (Builder $q) => $q->where('status', ClassEnrollment::STATUS_PENDING)->where('hold_expires_at', '>', now())))
+            ->with('tewtoraClass.sessions')
+            ->orderByDesc('created_at')
+            ->get();
+    }
+
     public function hasConfirmedFor(TewtoraClass $class, array $learnerIds, int $payerAccountId): bool
     {
         return ClassEnrollment::where('tewtora_class_id', $class->id)

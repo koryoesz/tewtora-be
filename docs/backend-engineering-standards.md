@@ -274,3 +274,23 @@ class ConsentRequiredIfMinor implements ValidationRule
 - **Sanctum vs. a full OAuth2 setup** — Sanctum is recommended above because there's no current third-party API consumer; revisit if Tewtora ever exposes an API to school/corporate partners directly.
 - **Single Laravel app vs. four** — this document assumes the architecture doc's "bundle three, isolate Payment" recommendation; if Payment is built as a fully separate Laravel app, it needs its own copy of the Shared exception/logging conventions, not a shared package, unless a private Composer package is set up for that purpose.
 - **Log retention and access control specifics** (who can read the `payment` and `audit` channels) should be confirmed with whoever owns compliance before launch — the structure above supports restricting it, but the actual access policy isn't a code decision.
+
+## 13. PHP runtime baseline (PHP2Shell)
+
+Both apps require a PHP with the PHP2Shell fixes (CVE-2026-109618/109619):
+`~8.3.36 || ~8.4.27 || ^8.5.12` in `composer.json`. `composer install`
+refuses an older PHP, and Composer's platform check stops the app booting on
+one. Don't loosen the constraint to get a build through: upgrade PHP instead.
+
+Every server running these apps (FPM, CLI for queue workers and the
+scheduler) must also set, in php.ini:
+
+```ini
+session.upload_progress.enabled = 0
+```
+
+This mitigates CVE-2026-115560, which the October 21 releases don't fix.
+It stays off permanently: Laravel doesn't use PHP's upload-progress feature,
+so turning it back on after an upgrade gains nothing. `public/.user.ini`
+sets the same for FPM as a backstop, but php.ini is the real control (the CLI
+ignores `.user.ini`).

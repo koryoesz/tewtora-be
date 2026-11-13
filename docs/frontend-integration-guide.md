@@ -877,7 +877,19 @@ names as `lib/classes.ts`. Times are Lagos (`+01:00`), money is
 | `POST /class-enrollments/{id}/verify-payment` | Call on the return page when you know the enrolment id. Safe to poll. |
 | `POST /class-enrollments/verify-payment` `{ reference }` (or `{ trxref }`) | The same, by the `reference` Paystack put on your return URL. `404` for an unknown reference or someone else's. |
 | `GET /class-enrollments`, `GET /class-enrollments/{id}` | Your enrolments (a child login sees its own). |
+| `GET /learners/{learnerPublicId}/class-enrollments` | One child's class seats, for the **plans page** next to `GET /learners/{id}/plans`. Only seats that count: `confirmed`, plus `pending_payment` while the hold is live (expired/cancelled left out). Owner or the child's own login, else `403`; unknown id `404`. |
 | `POST /classes/{id}/rating` `{ rating: 1-5, comment? }` | Payer with a confirmed seat, once a class day has finished. Rating again replaces your rating. Returns `{ rating_avg, rating_count }`. |
+
+Every enrolment's `class` object also carries the schedule, same meaning as
+on the catalogue item: `days, starts_at_time, ends_at_time, timezone,
+total_days, days_done, next_day {day, starts_at}` (`next_day` null once the
+last day has ended).
+
+**Classes on the plans page.** Plans and class seats stay separate resources
+(different money, lifecycle and actions). Show them side by side: link a
+class card to `/classes/{id}`, offer class actions (days, join, rate), never
+pause/rebook/move. If you total "paid to date", add `amount_minor` of
+`confirmed` seats only, per `currency_code`.
 
 Both verify calls return the enrolment as `data` plus
 `verification: { payment_status, enrolled, reference, channel, paid_at }`.
